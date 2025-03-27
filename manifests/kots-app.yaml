@@ -1,0 +1,21 @@
+apiVersion: kots.io/v1beta1
+kind: Application
+metadata:
+  name: gitea
+spec:
+  title: Gitea
+  statusInformers:
+    - deployment/gitea
+    - service/gitea
+    - deployment/gitea-sdk
+    - service/gitea-sdk    
+    - statefulset/gitea-postgresql
+    - service/gitea-postgresql
+    - ingress-nginx/deployment/ingress-nginx-controller
+    - ingress-nginx/service/ingress-nginx-controller
+  ports:
+    - serviceName: "gitea"
+      servicePort: 3000
+      localPort: 30005
+      applicationUrl: "http://gitea"
+  icon: https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Gitea_Logo.svg/1024px-Gitea_Logo.svg.png

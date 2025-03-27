@@ -1,0 +1,43 @@
+apiVersion: kots.io/v1beta2
+kind: HelmChart
+metadata:
+  name: gitea
+spec:
+  # chart identifies a matching chart from a .tgz
+  chart:
+    name: gitea
+    chartVersion: 3.1.14
+  values:
+    image:
+      registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}' 
+      repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "bitnami" }}/gitea'
+      pullSecrets:
+        - name: '{{repl ImagePullSecretName }}'
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30005
+    postgresql:
+      image:
+        registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}'
+        repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "bitnami" }}/postgresql'
+        pullSecrets:
+          - name: '{{repl ImagePullSecretName }}'
+      auth:
+        username: repl{{ ConfigOption "postgres_username" }}
+        password: repl{{ ConfigOption "postgres_password" }}
+        database: repl{{ ConfigOption "postgres_database" }}
+    replicated:
+      image:
+        registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}'
+        repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "replicated" }}/replicated-sdk'
+      imagePullSecrets:
+        - name: '{{repl ImagePullSecretName }}'
+      nameOverride: gitea-sdk
+  optionalValues:
+    - when: 'repl{{ ConfigOptionEquals "use_dedicated_pg_node" "1" }}'
+      values:
+        postgresql:
+          primary:
+            nodeSelector:
+              database: "true"

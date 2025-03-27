@@ -1,0 +1,26 @@
+apiVersion: kots.io/v1beta1
+kind: Config
+metadata:
+  name: gitea-config
+spec:
+  groups:
+  - name: gitea_settings
+    title: Gitea Config
+    description: Configuration to serve as an example for creating your own.
+    items:
+    - name: use_dedicated_pg_node
+      title: Use Dedicated Postgres Node?
+      help_text: Do you want to run Postgres on a dedicated node?
+      type: bool
+    - name: postgres_username
+      title: Postgres Username
+      type: text
+      default: username
+    - name: postgres_password
+      title: Postgres Password
+      type: password
+      default: password
+    - name: postgres_database
+      title: Postgres Database
+      type: text
+      default: db
