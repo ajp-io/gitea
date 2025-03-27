@@ -13,12 +13,13 @@
 ## @param global.storageClass DEPRECATED: use global.defaultStorageClass instead
 ##
 global:
-  imageRegistry: ""
+  imageRegistry: images.alexparker.info/docker.io
   ## E.g.
   ## imagePullSecrets:
   ##   - myRegistryKeySecretName
   ##
-  imagePullSecrets: []
+  imagePullSecrets:
+    - name: replicated-pull-secret
   defaultStorageClass: ""
   storageClass: ""
   ## Security parameters
@@ -780,3 +781,7 @@ volumePermissions:
   ##     memory: 1024Mi
   ##
   resources: {}
+
+replicated:
+  nameOverride: gitea-sdk
+  replicatedAppDomain: updates.alexparker.info

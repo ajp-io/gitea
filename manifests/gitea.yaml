@@ -8,33 +8,38 @@ spec:
     name: gitea
     chartVersion: 3.1.14
   values:
-    image:
-      registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}' 
-      repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "bitnami" }}/gitea'
-      pullSecrets:
-        - name: '{{repl ImagePullSecretName }}'
     service:
       type: NodePort
       nodePorts:
         http: 30005
-    postgresql:
-      image:
-        registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}'
-        repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "bitnami" }}/postgresql'
-        pullSecrets:
-          - name: '{{repl ImagePullSecretName }}'
       auth:
         username: repl{{ ConfigOption "postgres_username" }}
         password: repl{{ ConfigOption "postgres_password" }}
         database: repl{{ ConfigOption "postgres_database" }}
-    replicated:
-      image:
-        registry: '{{repl HasLocalRegistry | ternary LocalRegistryHost "docker.io" }}'
-        repository: '{{repl HasLocalRegistry | ternary LocalRegistryNamespace "replicated" }}/replicated-sdk'
-      imagePullSecrets:
-        - name: '{{repl ImagePullSecretName }}'
-      nameOverride: gitea-sdk
   optionalValues:
+    - when: 'repl{{ HasLocalRegistry }}'
+      values:
+        image:
+          registry: '{{repl LocalRegistryHost }}' 
+          repository: '{{repl LocalRegistryNamespace }}/gitea'
+        pullSecrets:
+          - name: '{{repl ImagePullSecretName }}'
+    - when: 'repl{{ HasLocalRegistry }}'
+      values:
+        postgresql:
+          image:
+            registry: '{{repl LocalRegistryHost }}'
+            repository: '{{repl LocalRegistryNamespace }}/postgresql'
+          pullSecrets:
+            - name: '{{repl ImagePullSecretName }}'
+    - when: 'repl{{ HasLocalRegistry }}'
+      values:
+        replicated:
+          image:
+            registry: '{{repl LocalRegistryHost }}'
+            repository: '{{repl LocalRegistryNamespace }}/replicated-sdk'
+          imagePullSecrets:
+            - name: '{{repl ImagePullSecretName }}'
     - when: 'repl{{ ConfigOptionEquals "use_dedicated_pg_node" "1" }}'
       values:
         postgresql:
