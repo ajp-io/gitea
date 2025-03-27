@@ -13,7 +13,7 @@
 ## @param global.storageClass DEPRECATED: use global.defaultStorageClass instead
 ##
 global:
-  imageRegistry: images.alexparker.info/proxy/gitea-masodon/docker.io
+  imageRegistry: images.alexparker.info/proxy/gitea-mastodon/docker.io
   ## E.g.
   ## imagePullSecrets:
   ##   - myRegistryKeySecretName
