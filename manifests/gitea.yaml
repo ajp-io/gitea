@@ -16,6 +16,8 @@ spec:
         username: repl{{ ConfigOption "postgres_username" }}
         password: repl{{ ConfigOption "postgres_password" }}
         database: repl{{ ConfigOption "postgres_database" }}
+    replicated:
+      isAirgap: repl{{ HasLocalRegistry }}
   optionalValues:
     - when: 'repl{{ HasLocalRegistry }}'
       values:
@@ -46,3 +48,7 @@ spec:
           primary:
             nodeSelector:
               database: "true"
+  builder:
+    global:
+      replicated:
+        dockerconfigjson: placeholder # don't fail air gap builds
