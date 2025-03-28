@@ -785,3 +785,5 @@ volumePermissions:
 replicated:
   nameOverride: gitea-sdk
   replicatedAppDomain: updates.alexparker.info
+  imagePullSecrets:
+    - name: replicated-pull-secret
