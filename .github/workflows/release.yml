@@ -27,21 +27,19 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Install Replicated CLI
-        run: |
-          curl -fsSL https://github.com/replicatedhq/replicated/releases/latest/download/replicated_linux_amd64.tar.gz | tar -xz
-          sudo mv replicated /usr/local/bin/replicated
-          replicated version
-
-      - name: Get current version and increment
-        id: version
+      - name: Get current version via Docker
+        id: current_version
+        uses: docker://replicated/vendor-cli:latest
+        with:
+          args: channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
-        run: |
 
-          # Get current version from Unstable channel
-          # Channel ID 2Xob31FcCoAQdbHBn44NLHSgeZF is hardcoded from your zshrc
-          current_version=$(replicated channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json | jq -r '.releaseLabel')
+      - name: Parse and increment version
+        id: version
+        run: |
+          # Parse current version from previous step output and increment patch version
+          current_version=$(echo '${{ steps.current_version.outputs.result }}' | jq -r '.releaseLabel')
           echo "Current version: $current_version"
 
           # Parse and increment patch version
