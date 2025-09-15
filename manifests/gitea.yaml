@@ -6,49 +6,106 @@ spec:
   # chart identifies a matching chart from a .tgz
   chart:
     name: gitea
-    chartVersion: 3.1.14
+    chartVersion: 12.2.0
+  helmUpgradeFlags:
+    - --wait
+    - --timeout
+    - 5m
   values:
-    service:
-      type: NodePort
-      nodePorts:
-        http: 30005
-      auth:
-        username: repl{{ ConfigOption "postgres_username" }}
-        password: repl{{ ConfigOption "postgres_password" }}
-        database: repl{{ ConfigOption "postgres_database" }}
-    replicated:
-      isAirgap: repl{{ HasLocalRegistry }}
-  optionalValues:
-    - when: 'repl{{ HasLocalRegistry }}'
-      values:
-        image:
-          registry: '{{repl LocalRegistryHost }}' 
-          repository: '{{repl LocalRegistryNamespace }}/gitea'
-        pullSecrets:
-          - name: '{{repl ImagePullSecretName }}'
-    - when: 'repl{{ HasLocalRegistry }}'
-      values:
-        postgresql:
-          image:
-            registry: '{{repl LocalRegistryHost }}'
-            repository: '{{repl LocalRegistryNamespace }}/postgresql'
-          pullSecrets:
-            - name: '{{repl ImagePullSecretName }}'
-    - when: 'repl{{ HasLocalRegistry }}'
-      values:
-        replicated:
-          image:
-            registry: '{{repl LocalRegistryHost }}'
-            repository: '{{repl LocalRegistryNamespace }}/replicated-sdk'
-          imagePullSecrets:
-            - name: '{{repl ImagePullSecretName }}'
-    - when: 'repl{{ ConfigOptionEquals "use_dedicated_pg_node" "1" }}'
-      values:
-        postgresql:
-          primary:
-            nodeSelector:
-              database: "true"
-  builder:
     global:
+      imagePullSecrets:
+        - '{{repl ImagePullSecretName }}'
+      security:
+        allowInsecureImages: true
+    image:
+      imagePullSecrets:
+        - '{{repl ImagePullSecretName }}'
+    gitea:
+      admin:
+        username: repl{{ ConfigOption "gitea_username" }}
+        password: repl{{ ConfigOption "gitea_password" }}
+        email: repl{{ ConfigOption "gitea_email" }}
+      config:
+        server:
+          HTTP_PORT: 3000
+    replicated:
+      imagePullSecrets:
+        - name: '{{repl ImagePullSecretName }}'
+  optionalValues:
+    # External PostgreSQL mode
+    - when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+      values:
+        postgresql:
+          enabled: false
+        postgresql-ha:
+          enabled: false
+        valkey:
+          enabled: false
+        valkey-cluster:
+          enabled: false
+        gitea:
+          config:
+            database:
+              DB_TYPE: postgres
+              HOST: repl{{ ConfigOption "external_postgres_host" }}
+              NAME: repl{{ ConfigOption "external_postgres_database" }}
+              USER: repl{{ ConfigOption "external_postgres_username" }}
+              PASSWD: repl{{ ConfigOption "external_postgres_password" }}
+              SCHEMA: repl{{ ConfigOption "external_postgres_schema" }}
+    # Embedded PostgreSQL - Non-HA mode
+    - when: 'repl{{ and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0") }}'
+      values:
+        postgresql:
+          enabled: true
+          global:
+            postgresql:
+              auth:
+                username: repl{{ ConfigOption "embedded_postgres_username" }}
+                password: repl{{ ConfigOption "embedded_postgres_password" }}
+                database: repl{{ ConfigOption "embedded_postgres_database" }}
+        valkey:
+          enabled: true
+        postgresql-ha:
+          enabled: false
+        valkey-cluster:
+          enabled: false
+    # Embedded PostgreSQL - HA mode
+    - when: 'repl{{ and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1") }}'
+      values:
+        replicaCount: 3
+        postgresql:
+          enabled: false
+        postgresql-ha:
+          enabled: true
+          global:
+            postgresql:
+              username: repl{{ ConfigOption "embedded_postgres_username" }}
+              password: repl{{ ConfigOption "embedded_postgres_password" }}
+              database: repl{{ ConfigOption "embedded_postgres_database" }}
+          postgresql:
+            # HA PostgreSQL requires additional passwords
+            repmgrPassword: repl{{ ConfigOption "embedded_postgres_password" }}
+            postgresPassword: repl{{ ConfigOption "embedded_postgres_password" }}
+          pgpool:
+            # Pgpool passwords for HA
+            adminPassword: repl{{ ConfigOption "embedded_postgres_password" }}
+            srCheckPassword: repl{{ ConfigOption "embedded_postgres_password" }}
+        valkey:
+          enabled: false
+        valkey-cluster:
+          enabled: true
+  builder:
+    # Builder needs to enable both modes for airgap builds
+    postgresql:
+      enabled: true
+    postgresql-ha:
+      enabled: true
+    valkey:
+      enabled: true
+    valkey-cluster:
+      enabled: true
+    global:
+      security:
+        allowInsecureImages: true
       replicated:
         dockerconfigjson: placeholder # don't fail air gap builds

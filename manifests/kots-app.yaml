@@ -6,16 +6,24 @@ spec:
   title: Gitea
   statusInformers:
     - deployment/gitea
-    - service/gitea
+    - service/gitea-http
+    - service/gitea-ssh
     - deployment/gitea-sdk
-    - service/gitea-sdk    
-    - statefulset/gitea-postgresql
-    - service/gitea-postgresql
-    - ingress-nginx/deployment/ingress-nginx-controller
-    - ingress-nginx/service/ingress-nginx-controller
+    - service/gitea-sdk
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}statefulset/gitea-postgresql{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}statefulset/gitea-valkey-primary{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}service/gitea-postgresql{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}service/gitea-postgresql-hl{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}service/gitea-valkey-headless{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "0")) }}service/gitea-valkey-primary{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1")) }}statefulset/gitea-postgresql-ha-postgresql{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1")) }}statefulset/gitea-valkey-cluster{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1")) }}service/gitea-postgresql-ha-postgresql{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1")) }}service/gitea-postgresql-ha-postgresql-headless{{repl end}}'
+    - '{{repl if (and (ConfigOptionEquals "database_type" "embedded") (ConfigOptionEquals "enable_ha" "1")) }}service/gitea-valkey-cluster{{repl end}}'
   ports:
-    - serviceName: "gitea"
+    - serviceName: "gitea-http"
       servicePort: 3000
       localPort: 30005
-      applicationUrl: "http://gitea"
+      applicationUrl: "http://gitea-http"
   icon: https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Gitea_Logo.svg/1024px-Gitea_Logo.svg.png

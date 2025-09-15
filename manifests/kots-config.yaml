@@ -5,22 +5,87 @@ metadata:
 spec:
   groups:
   - name: gitea_settings
-    title: Gitea Config
-    description: Configuration to serve as an example for creating your own.
+    title: Gitea Settings
+    description: Settings for the Gitea application
     items:
-    - name: use_dedicated_pg_node
-      title: Use Dedicated Postgres Node?
-      help_text: Do you want to run Postgres on a dedicated node?
-      type: bool
-    - name: postgres_username
-      title: Postgres Username
+    - name: gitea_username
+      title: Gitea Username
       type: text
-      default: username
-    - name: postgres_password
-      title: Postgres Password
+      required: true
+    - name: gitea_password
+      title: Gitea Password
       type: password
-      default: password
-    - name: postgres_database
-      title: Postgres Database
+      required: true
+    - name: gitea_email
+      title: Gitea Admin Email
       type: text
-      default: db
+      required: true
+  - name: postgresql_settings
+    title: PostgreSQL Settings
+    items:
+    - name: database_type
+      title: Database Type
+      type: select_one
+      items:
+      - name: embedded
+        title: Embedded PostgreSQL
+        description: Use the built-in PostgreSQL database (recommended for most deployments)
+      - name: external
+        title: External PostgreSQL
+        description: Use an existing PostgreSQL database server
+      default: embedded
+      required: true
+    - name: external_postgres_host
+      title: External PostgreSQL Host
+      type: text
+      required: true
+      help_text: The hostname and port of your external PostgreSQL server (e.g., "postgres.example.com:5432" or "10.0.0.100:5432")
+      when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+    - name: external_postgres_database
+      title: External PostgreSQL Database Name
+      type: text
+      default: gitea
+      help_text: The name of the database to use for Gitea
+      when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+    - name: external_postgres_username
+      title: External PostgreSQL Username
+      type: text
+      required: true
+      default: postgres
+      help_text: The username to connect to the external PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+    - name: external_postgres_password
+      title: External PostgreSQL Password
+      type: password
+      required: true
+      help_text: The password to connect to the external PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+    - name: external_postgres_schema
+      title: External PostgreSQL Schema
+      type: text
+      default: public
+      help_text: The schema to use in the external PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "external" }}'
+    - name: embedded_postgres_username
+      title: Embedded PostgreSQL Username
+      type: text
+      default: gitea
+      help_text: Username for the embedded PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "embedded" }}'
+    - name: embedded_postgres_password
+      title: Embedded PostgreSQL Password
+      type: password
+      default: gitea
+      help_text: Password for the embedded PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "embedded" }}'
+    - name: embedded_postgres_database
+      title: Embedded PostgreSQL Database Name
+      type: text
+      default: gitea
+      help_text: Database name for the embedded PostgreSQL database
+      when: 'repl{{ ConfigOptionEquals "database_type" "embedded" }}'
+    - name: enable_ha
+      title: Enable High Availability
+      type: bool
+      default: false
+      when: 'repl{{ ConfigOptionEquals "database_type" "embedded" }}'
