@@ -31,20 +31,27 @@ jobs:
         id: current_version
         uses: docker://replicated/vendor-cli:latest
         with:
-          args: channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json
+          args: channel inspect 2ulyXuPW24tfySdkkaoXwx38nMb --output json
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
 
-      - name: Parse and increment version
+      - name: Generate semantic version
         id: version
         run: |
-          # Parse current version from previous step output and increment patch version
+          # Parse current version from previous step output
           current_version=$(echo '${{ steps.current_version.outputs.result }}' | jq -r '.releaseLabel')
           echo "Current version: $current_version"
 
-          # Parse and increment patch version
-          IFS='.' read -r major minor patch <<< "$current_version"
-          new_version="$major.$minor.$((patch + 1))"
+          # Check if current version follows semantic versioning (x.y.z format)
+          if [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # Parse and increment patch version
+            IFS='.' read -r major minor patch <<< "$current_version"
+            new_version="$major.$minor.$((patch + 1))"
+          else
+            # Current version is not semver, start with 1.0.0
+            new_version="1.0.0"
+          fi
+
           echo "New version: $new_version"
           echo "version=$new_version" >> $GITHUB_OUTPUT
 
@@ -62,14 +69,12 @@ jobs:
           ls -la manifests/*.tgz
 
       - name: Create Replicated Release
-        uses: replicatedhq/compatibility-actions/create-release@v1
+        uses: docker://replicated/vendor-cli:latest
         with:
-          app-slug: ${{ env.REPLICATED_APP }}
-          api-token: ${{ secrets.REPLICATED_API_TOKEN }}
-          yaml-dir: ./manifests
-          promote-channel: Unstable
-          version: ${{ steps.version.outputs.version }}
-          lint: ${{ github.event_name == 'workflow_dispatch' && inputs.lint || true }}
+          args: release create --auto -y --version ${{ steps.version.outputs.version }}
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+          REPLICATED_APP: ${{ env.REPLICATED_APP }}
 
       - name: Clean up artifacts
         if: always()
