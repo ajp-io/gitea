@@ -1,0 +1,80 @@
+name: Create Replicated Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      lint:
+        description: 'Enable linting during release creation'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REPLICATED_APP: gitea-mastodon
+  REPLICATED_API_ORIGIN: https://api.replicated.com/vendor
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Install Replicated CLI
+        run: |
+          curl -fsSL https://github.com/replicatedhq/replicated/releases/latest/download/replicated_linux_amd64.tar.gz | tar -xz
+          sudo mv replicated /usr/local/bin/replicated
+          replicated version
+
+      - name: Get current version and increment
+        id: version
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+        run: |
+
+          # Get current version from Unstable channel
+          # Channel ID 2Xob31FcCoAQdbHBn44NLHSgeZF is hardcoded from your zshrc
+          current_version=$(replicated channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json | jq -r '.releaseLabel')
+          echo "Current version: $current_version"
+
+          # Parse and increment patch version
+          IFS='.' read -r major minor patch <<< "$current_version"
+          new_version="$major.$minor.$((patch + 1))"
+          echo "New version: $new_version"
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Clean old Helm packages
+        run: |
+          if ls manifests/*.tgz >/dev/null 2>&1; then
+            rm -f manifests/*.tgz
+            echo "Cleaned old .tgz files"
+          fi
+
+      - name: Package Helm chart
+        run: |
+          helm package gitea -d manifests -u
+          echo "Packaged Helm chart:"
+          ls -la manifests/*.tgz
+
+      - name: Create Replicated Release
+        uses: replicatedhq/compatibility-actions/create-release@v1
+        with:
+          app-slug: ${{ env.REPLICATED_APP }}
+          api-token: ${{ secrets.REPLICATED_API_TOKEN }}
+          yaml-dir: ./manifests
+          promote-channel: Unstable
+          version: ${{ steps.version.outputs.version }}
+          lint: ${{ github.event_name == 'workflow_dispatch' && inputs.lint || true }}
+
+      - name: Clean up artifacts
+        if: always()
+        run: |
+          rm -f manifests/*.tgz
+          echo "Cleaned up build artifacts"
