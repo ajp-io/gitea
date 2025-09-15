@@ -30,22 +30,37 @@ jobs:
       - name: Get current version and generate semantic version
         id: version
         run: |
-          # Get current version using Docker container
-          current_version=$(docker run --rm \
+          # Get current version using Docker container with debug info
+          echo "Getting current version from Unstable channel..."
+
+          channel_output=$(docker run --rm \
             -e REPLICATED_API_TOKEN="${{ secrets.REPLICATED_API_TOKEN }}" \
             -e REPLICATED_APP="${{ env.REPLICATED_APP }}" \
             replicated/vendor-cli:latest \
-            channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json | jq -r '.releaseLabel')
+            channel inspect 2Xob31FcCoAQdbHBn44NLHSgeZF --output json 2>&1)
 
-          echo "Current version: $current_version"
+          echo "Channel output: $channel_output"
+
+          current_version=$(echo "$channel_output" | jq -r '.releaseLabel // empty' 2>/dev/null)
+          echo "Current version parsed: '$current_version'"
+
+          # Check if we got a valid version
+          if [[ -z "$current_version" || "$current_version" == "null" ]]; then
+            echo "ERROR: Could not get current version, using 1.0.0 as fallback"
+            current_version="1.0.0"
+          fi
+
+          echo "Using current version: $current_version"
 
           # Check if current version follows semantic versioning (x.y.z format)
           if [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             # Parse and increment patch version
             IFS='.' read -r major minor patch <<< "$current_version"
             new_version="$major.$minor.$((patch + 1))"
+            echo "Incrementing semantic version: $current_version -> $new_version"
           else
             # Current version is not semver, start with 1.0.0
+            echo "Current version '$current_version' is not semantic, starting with 1.0.0"
             new_version="1.0.0"
           fi
 
