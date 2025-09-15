@@ -27,19 +27,26 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Get current version via Docker
-        id: current_version
+      - name: List channels to find correct ID
+        id: list_channels
         uses: docker://replicated/vendor-cli:latest
         with:
-          args: channel inspect 2ulyXuPW24tfySdkkaoXwx38nMb --output json
+          args: channel ls --output json
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+          REPLICATED_APP: ${{ env.REPLICATED_APP }}
 
-      - name: Generate semantic version
+      - name: Get Unstable channel version and generate semantic version
         id: version
         run: |
-          # Parse current version from previous step output
-          current_version=$(echo '${{ steps.current_version.outputs.result }}' | jq -r '.releaseLabel')
+          # Get the Unstable channel ID and version from the channel list
+          channels='${{ steps.list_channels.outputs.result }}'
+          echo "Available channels: $channels"
+
+          unstable_channel=$(echo "$channels" | jq -r '.[] | select(.name=="Unstable")')
+          echo "Unstable channel: $unstable_channel"
+
+          current_version=$(echo "$unstable_channel" | jq -r '.releaseLabel // "none"')
           echo "Current version: $current_version"
 
           # Check if current version follows semantic versioning (x.y.z format)
