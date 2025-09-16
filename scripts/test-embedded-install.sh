@@ -27,7 +27,7 @@ sudo ./gitea-mastodon install \
 echo "Installation complete! Verifying cluster and pods..."
 
 # Use shell with heredoc to run kubectl commands
-sudo gitea-mastodon shell << 'EOF'
+sudo ./gitea-mastodon shell << 'EOF'
 echo "Checking cluster status..."
 kubectl get nodes
 
