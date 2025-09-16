@@ -6,6 +6,7 @@ on:
     paths:
       - 'gitea/**'
       - 'manifests/**'
+      - '.github/workflows/pr-test.yml'  # Allow testing the workflow itself
 
 env:
   REPLICATED_APP: gitea-mastodon
