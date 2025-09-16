@@ -6,7 +6,7 @@ echo "Starting at: $(date)"
 
 echo "Downloading Embedded Cluster installation assets for version: ${TEST_VERSION}"
 curl -f "https://updates.alexparker.info/embedded/gitea-mastodon/unstable/${TEST_VERSION}" \
-  -H "Authorization: 3ZnCUpJuy9TUwE8CYdvS2KIIFy9" \
+  -H "Authorization: 32nCUpJuy9TUwE8CYdvS2KIIFy9" \
   -o gitea-mastodon-unstable.tgz
 
 echo "Extracting installation assets..."
