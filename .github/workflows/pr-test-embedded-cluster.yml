@@ -1,4 +1,4 @@
-name: PR Test - Embedded Cluster
+name: Embedded Cluster Installation Test
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     paths:
       - 'gitea/**'
       - 'manifests/**'
-      - '.github/workflows/pr-test.yml'  # Allow testing the workflow itself
+      - '.github/workflows/pr-test-embedded-cluster.yml'  # Allow testing the workflow itself
 
 env:
   REPLICATED_APP: gitea-mastodon
