@@ -74,13 +74,14 @@ jobs:
       - name: Create test VM
         id: vm
         run: |
-          # Create VM for testing
-          echo "Creating VM for PR testing..."
+          # Create VM for testing with 10 minute wait
+          echo "Creating VM for PR testing (waiting up to 10 minutes)..."
           VM_OUTPUT=$(replicated vm create \
             --distribution ubuntu \
             --version 22.04 \
             --instance-type r1.small \
             --name "pr-test-${{ github.event.pull_request.number }}" \
+            --wait 10m \
             --output json)
 
           echo "VM creation output:"
@@ -95,47 +96,7 @@ jobs:
           fi
 
           echo "vm_id=$VM_ID" >> $GITHUB_OUTPUT
-          echo "Created VM: $VM_ID"
-
-          # Wait for VM to be in running state
-          echo "Waiting for VM to be in running state..."
-          for i in {1..15}; do
-            VM_INFO=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\")")
-            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status')
-            SCHEDULING_STATUS=$(echo "$VM_INFO" | jq -r '.last_scheduling_status // "unknown"')
-
-            echo "VM status check $i: $VM_STATUS (scheduling: $SCHEDULING_STATUS)"
-
-            if [[ "$VM_STATUS" == "running" ]]; then
-              echo "✅ VM is now running!"
-              break
-            elif [[ "$VM_STATUS" == "error" || "$VM_STATUS" == "terminated" ]]; then
-              echo "❌ VM failed to start (status: $VM_STATUS)"
-              echo "VM details: $VM_INFO"
-              exit 1
-            elif [[ "$SCHEDULING_STATUS" == "failed" ]]; then
-              echo "❌ VM scheduling failed"
-              echo "VM details: $VM_INFO"
-              exit 1
-            fi
-
-            sleep 10
-          done
-
-          # Final status check
-          FINAL_INFO=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\")")
-          FINAL_STATUS=$(echo "$FINAL_INFO" | jq -r '.status')
-          if [[ "$FINAL_STATUS" != "running" ]]; then
-            echo "❌ VM never reached running state (final status: $FINAL_STATUS)"
-            echo "Final VM details: $FINAL_INFO"
-
-            # If it's still queued after 2.5 minutes, leave it for debugging
-            if [[ "$FINAL_STATUS" == "queued" ]]; then
-              echo "⚠️ VM stuck in queued state - this might be due to resource availability"
-              echo "Leaving VM $VM_ID for debugging (24h TTL will auto-cleanup)"
-            fi
-            exit 1
-          fi
+          echo "✅ VM created and ready: $VM_ID"
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
 
@@ -146,7 +107,7 @@ jobs:
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
           # Get SCP endpoint for file transfers
-          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }})
+          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
           echo "SCP endpoint: $SCP_ENDPOINT"
 
           # Make scripts executable
@@ -164,7 +125,7 @@ jobs:
         id: test
         run: |
           # Get SSH endpoint for connection
-          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
           echo "SSH endpoint: $SSH_ENDPOINT"
 
           # Run the test script on the VM with the test version
@@ -195,12 +156,14 @@ jobs:
       - name: Report test results
         if: always()
         run: |
-          if [[ "${{ steps.test.outcome }}" == "success" ]]; then
+          TEST_OUTCOME="${{ steps.test.outcome }}"
+
+          if [[ "$TEST_OUTCOME" == "success" ]]; then
             echo "✅ Embedded cluster installation test PASSED"
-            echo "The Gitea chart changes work correctly with embedded cluster deployment."
-          else
+            echo "The changes in this PR work correctly with embedded cluster deployment."
+          elif [[ "$TEST_OUTCOME" == "failure" ]]; then
             echo "❌ Embedded cluster installation test FAILED"
-            echo "There may be issues with the chart changes. Please review the logs above."
+            echo "There may be issues with the changes in this PR. Please review the logs above."
 
             # Show VM info for debugging
             if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
@@ -208,7 +171,23 @@ jobs:
               echo "🔍 Debug Information:"
               echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
               echo "VM has been left running for debugging (24h TTL)"
-              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})"
+              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
             fi
+            exit 1
+          elif [[ "$TEST_OUTCOME" == "skipped" || -z "$TEST_OUTCOME" ]]; then
+            echo "❌ Embedded cluster installation test was SKIPPED due to earlier failures"
+            echo "Please check the logs above to see what step failed."
+
+            # Show VM info for debugging if VM was created
+            if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
+              echo ""
+              echo "🔍 Debug Information:"
+              echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
+              echo "VM has been left running for debugging (24h TTL)"
+              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
+            fi
+            exit 1
+          else
+            echo "❌ Embedded cluster installation test had unexpected outcome: $TEST_OUTCOME"
             exit 1
           fi
