@@ -128,11 +128,10 @@ jobs:
             echo "❌ VM never reached running state (final status: $FINAL_STATUS)"
             echo "Final VM details: $FINAL_INFO"
 
-            # If it's still queued after 2.5 minutes, maybe try a different approach
+            # If it's still queued after 2.5 minutes, leave it for debugging
             if [[ "$FINAL_STATUS" == "queued" ]]; then
               echo "⚠️ VM stuck in queued state - this might be due to resource availability"
-              echo "Attempting to clean up and exit gracefully..."
-              replicated vm rm "$VM_ID" --force || true
+              echo "Leaving VM $VM_ID for debugging (24h TTL will auto-cleanup)"
             fi
             exit 1
           fi
@@ -175,10 +174,10 @@ jobs:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
 
       - name: Cleanup VM
-        if: always()
+        if: success()
         run: |
           if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
-            echo "Cleaning up VM: ${{ steps.vm.outputs.vm_id }}"
+            echo "✅ Test passed! Cleaning up VM: ${{ steps.vm.outputs.vm_id }}"
             replicated vm rm ${{ steps.vm.outputs.vm_id }} --force || true
             echo "VM cleanup completed"
           fi
@@ -200,5 +199,14 @@ jobs:
           else
             echo "❌ Embedded cluster installation test FAILED"
             echo "There may be issues with the chart changes. Please review the logs above."
+
+            # Show VM info for debugging
+            if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
+              echo ""
+              echo "🔍 Debug Information:"
+              echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
+              echo "VM has been left running for debugging (24h TTL)"
+              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})"
+            fi
             exit 1
           fi
