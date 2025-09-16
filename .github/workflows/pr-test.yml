@@ -104,7 +104,7 @@ jobs:
 
       - name: Setup SSH and transfer files
         run: |
-          # Setup SSH key for VM access
+          # Setup SSH key for VM access (updated keys v2)
           mkdir -p ~/.ssh
           echo "${{ secrets.VM_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
