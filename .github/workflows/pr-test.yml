@@ -146,7 +146,7 @@ jobs:
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
           # Get SCP endpoint for file transfers
-          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
+          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }})
           echo "SCP endpoint: $SCP_ENDPOINT"
 
           # Make scripts executable
@@ -164,7 +164,7 @@ jobs:
         id: test
         run: |
           # Get SSH endpoint for connection
-          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
           echo "SSH endpoint: $SSH_ENDPOINT"
 
           # Run the test script on the VM with the test version
