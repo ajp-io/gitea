@@ -102,17 +102,18 @@ jobs:
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
 
-      - name: Setup SSH and transfer files
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+
+      - name: Setup SSH known hosts and transfer files
         run: |
-          # Setup SSH key for VM access (updated keys v2)
+          # Setup SSH known hosts
           mkdir -p ~/.ssh
-          cat > ~/.ssh/id_ed25519 << 'EOF'
-          ${{ secrets.VM_SSH_PRIVATE_KEY }}
-          EOF
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
-          # Get SCP endpoint for file transfers (fallback to explicit username until auto-detection works)
+          # Get SCP endpoint for file transfers
           SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
           echo "SCP endpoint: $SCP_ENDPOINT"
 
