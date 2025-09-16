@@ -120,9 +120,13 @@ jobs:
           # Make scripts executable
           chmod +x scripts/test-embedded-install.sh
 
-          # Transfer test files to VM using SCP protocol format
-          scp -O -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT/tmp/config.yaml
-          scp -O -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT/tmp/test.sh
+          # Transfer test files to VM home directory first
+          scp -O -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT/config.yaml
+          scp -O -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT/test.sh
+
+          # Get SSH endpoint and move files to /tmp
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
+          ssh -o StrictHostKeyChecking=no $SSH_ENDPOINT 'sudo mv config.yaml /tmp/ && sudo mv test.sh /tmp/ && ls -la /tmp/'
 
           echo "Files transferred successfully"
         env:
