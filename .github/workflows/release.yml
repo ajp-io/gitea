@@ -3,13 +3,10 @@ name: Create Replicated Release
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'gitea/**'
+      - 'manifests/**'
   workflow_dispatch:
-    inputs:
-      lint:
-        description: 'Enable linting during release creation'
-        required: false
-        default: true
-        type: boolean
 
 env:
   REPLICATED_APP: gitea-mastodon
@@ -27,10 +24,15 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
       - name: Get current version and generate semantic version
         id: version
         run: |
-          # Get current version using Docker container with debug info
+          # Get current version using Docker container
           echo "Getting current version from Unstable channel..."
 
           channel_output=$(docker run --rm \
@@ -44,27 +46,26 @@ jobs:
           current_version=$(echo "$channel_output" | jq -r '.releaseLabel // empty' 2>/dev/null)
           echo "Current version parsed: '$current_version'"
 
-          # Check if we got a valid version
+          # Check if we got a version
           if [[ -z "$current_version" || "$current_version" == "null" ]]; then
-            echo "ERROR: Could not get current version, using 1.0.0 as fallback"
-            current_version="1.0.0"
+            echo "ERROR: Could not get current version from channel"
+            exit 1
           fi
 
           echo "Using current version: $current_version"
 
-          # Check if current version follows semantic versioning (x.y.z format)
-          if [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            # Parse and increment patch version
-            IFS='.' read -r major minor patch <<< "$current_version"
-            new_version="$major.$minor.$((patch + 1))"
-            echo "Incrementing semantic version: $current_version -> $new_version"
-          else
-            # Current version is not semver, start with 1.0.0
-            echo "Current version '$current_version' is not semantic, starting with 1.0.0"
-            new_version="1.0.0"
-          fi
+          # Install semver and increment patch version
+          npm install semver
+          new_version=$(node -e "
+            const semver = require('semver');
+            const current = '$current_version';
+            if (!semver.valid(current)) {
+              throw new Error(\`Invalid semver version: \${current}\`);
+            }
+            console.log(semver.inc(current, 'patch'));
+          ")
 
-          echo "New version: $new_version"
+          echo "Incremented version: $current_version -> $new_version"
           echo "version=$new_version" >> $GITHUB_OUTPUT
 
       - name: Clean old Helm packages
@@ -80,10 +81,10 @@ jobs:
           echo "Packaged Helm chart:"
           ls -la manifests/*.tgz
 
-      - name: Create Replicated Release
+      - name: Create Replicated release
         uses: docker://replicated/vendor-cli:latest
         with:
-          args: release create --auto -y --version ${{ steps.version.outputs.version }}
+          args: release create --lint --yaml-dir ./manifests --promote Unstable --version ${{ steps.version.outputs.version }}
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
           REPLICATED_APP: ${{ env.REPLICATED_APP }}
