@@ -78,7 +78,7 @@ jobs:
           VM_OUTPUT=$(replicated vm create \
             --distribution ubuntu \
             --version 22.04 \
-            --instance-type r1.medium \
+            --instance-type r1.small \
             --name "pr-test-${{ github.event.pull_request.number }}" \
             --output json)
 
@@ -98,25 +98,42 @@ jobs:
 
           # Wait for VM to be in running state
           echo "Waiting for VM to be in running state..."
-          for i in {1..20}; do
-            VM_STATUS=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\") | .status")
-            echo "VM status check $i: $VM_STATUS"
+          for i in {1..15}; do
+            VM_INFO=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\")")
+            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status')
+            SCHEDULING_STATUS=$(echo "$VM_INFO" | jq -r '.last_scheduling_status // "unknown"')
+
+            echo "VM status check $i: $VM_STATUS (scheduling: $SCHEDULING_STATUS)"
 
             if [[ "$VM_STATUS" == "running" ]]; then
               echo "✅ VM is now running!"
               break
             elif [[ "$VM_STATUS" == "error" || "$VM_STATUS" == "terminated" ]]; then
               echo "❌ VM failed to start (status: $VM_STATUS)"
+              echo "VM details: $VM_INFO"
+              exit 1
+            elif [[ "$SCHEDULING_STATUS" == "failed" ]]; then
+              echo "❌ VM scheduling failed"
+              echo "VM details: $VM_INFO"
               exit 1
             fi
 
-            sleep 15
+            sleep 10
           done
 
           # Final status check
-          FINAL_STATUS=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\") | .status")
+          FINAL_INFO=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\")")
+          FINAL_STATUS=$(echo "$FINAL_INFO" | jq -r '.status')
           if [[ "$FINAL_STATUS" != "running" ]]; then
             echo "❌ VM never reached running state (final status: $FINAL_STATUS)"
+            echo "Final VM details: $FINAL_INFO"
+
+            # If it's still queued after 2.5 minutes, maybe try a different approach
+            if [[ "$FINAL_STATUS" == "queued" ]]; then
+              echo "⚠️ VM stuck in queued state - this might be due to resource availability"
+              echo "Attempting to clean up and exit gracefully..."
+              replicated vm rm "$VM_ID" --force || true
+            fi
             exit 1
           fi
         env:
