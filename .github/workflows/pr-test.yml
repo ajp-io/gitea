@@ -74,12 +74,24 @@ jobs:
         id: vm
         run: |
           # Create VM for testing
-          VM_ID=$(replicated vm create \
+          echo "Creating VM for PR testing..."
+          VM_OUTPUT=$(replicated vm create \
             --distribution ubuntu \
             --version 22.04 \
             --instance-type r1.medium \
             --name "pr-test-${{ github.event.pull_request.number }}" \
-            --output json | jq -r '.id')
+            --output json)
+
+          echo "VM creation output:"
+          echo "$VM_OUTPUT"
+
+          # Try to extract VM ID - handle both object and array responses
+          VM_ID=$(echo "$VM_OUTPUT" | jq -r 'if type == "array" then .[0].id else .id end')
+
+          if [[ -z "$VM_ID" || "$VM_ID" == "null" ]]; then
+            echo "❌ Failed to get VM ID from output"
+            exit 1
+          fi
 
           echo "vm_id=$VM_ID" >> $GITHUB_OUTPUT
           echo "Created VM: $VM_ID"
