@@ -1,4 +1,4 @@
-name: Embedded Cluster Installation Test
+name: PR Tests
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     paths:
       - 'gitea/**'
       - 'manifests/**'
-      - '.github/workflows/pr-test-embedded-cluster.yml'  # Allow testing the workflow itself
+      - '.github/workflows/pr-test.yml'  # Allow testing the workflow itself
 
 env:
   REPLICATED_APP: gitea-mastodon
@@ -104,12 +104,14 @@ jobs:
 
       - name: Setup SSH and transfer files
         run: |
-          # Setup SSH key for Compatibility Matrix
+          # Setup SSH key for VM access
           mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
-          # Get SCP endpoint for file transfers
-          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
+          # Get SCP endpoint for file transfers (username auto-detected from vendor portal)
+          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }})
           echo "SCP endpoint: $SCP_ENDPOINT"
 
           # Make scripts executable
@@ -126,8 +128,8 @@ jobs:
       - name: Run embedded cluster installation test
         id: test
         run: |
-          # Get SSH endpoint for connection
-          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)
+          # Get SSH endpoint for connection (username auto-detected from vendor portal)
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
           echo "SSH endpoint: $SSH_ENDPOINT"
 
           # Run the test script on the VM with the test version
@@ -173,7 +175,7 @@ jobs:
               echo "🔍 Debug Information:"
               echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
               echo "VM has been left running for debugging (24h TTL)"
-              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
+              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})"
             fi
             exit 1
           elif [[ "$TEST_OUTCOME" == "skipped" || -z "$TEST_OUTCOME" ]]; then
@@ -186,7 +188,7 @@ jobs:
               echo "🔍 Debug Information:"
               echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
               echo "VM has been left running for debugging (24h TTL)"
-              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
+              echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})"
             fi
             exit 1
           else
