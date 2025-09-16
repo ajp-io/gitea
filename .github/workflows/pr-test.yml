@@ -106,7 +106,9 @@ jobs:
         run: |
           # Setup SSH key for VM access (updated keys v2)
           mkdir -p ~/.ssh
-          echo "${{ secrets.VM_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          cat > ~/.ssh/id_ed25519 << 'EOF'
+          ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          EOF
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
