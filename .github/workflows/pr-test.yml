@@ -43,10 +43,9 @@ jobs:
       - name: Generate test version
         id: version
         run: |
-          # Generate unique version for PR testing using timestamp and commit SHA
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          # Generate unique version for PR testing using PR number, run number, and commit SHA
           COMMIT_SHORT=$(git rev-parse --short HEAD)
-          VERSION="0.0.0-pr${{ github.event.pull_request.number }}-${TIMESTAMP}-${COMMIT_SHORT}"
+          VERSION="2.0.0-pr${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
           echo "test_version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated unique test version: $VERSION"
 
@@ -146,20 +145,16 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
-          # Get SSH endpoint with username
-          SSH_ENDPOINT_RAW=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
-          echo "SSH endpoint: $SSH_ENDPOINT_RAW"
-
-          # Extract user@host:port format for SCP (remove ssh:// prefix)
-          SSH_ENDPOINT=$(echo "$SSH_ENDPOINT_RAW" | sed 's|ssh://||')
-          echo "SCP endpoint: $SSH_ENDPOINT"
+          # Get SCP endpoint for file transfers
+          SCP_ENDPOINT=$(replicated vm scp-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
+          echo "SCP endpoint: $SCP_ENDPOINT"
 
           # Make scripts executable
           chmod +x scripts/test-embedded-install.sh
 
-          # Transfer test files to VM
-          scp -o StrictHostKeyChecking=no -P $(echo $SSH_ENDPOINT | cut -d: -f2) test/embedded-config.yaml $(echo $SSH_ENDPOINT | cut -d: -f1):/tmp/config.yaml
-          scp -o StrictHostKeyChecking=no -P $(echo $SSH_ENDPOINT | cut -d: -f2) scripts/test-embedded-install.sh $(echo $SSH_ENDPOINT | cut -d: -f1):/tmp/test.sh
+          # Transfer test files to VM using SCP endpoint
+          scp -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT:/tmp/config.yaml
+          scp -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT:/tmp/test.sh
 
           echo "Files transferred successfully"
         env:
@@ -168,13 +163,13 @@ jobs:
       - name: Run embedded cluster installation test
         id: test
         run: |
-          # Get SSH endpoint
-          SSH_ENDPOINT_RAW=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
-          SSH_ENDPOINT=$(echo "$SSH_ENDPOINT_RAW" | sed 's|ssh://||')
+          # Get SSH endpoint for connection
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
+          echo "SSH endpoint: $SSH_ENDPOINT"
 
           # Run the test script on the VM with the test version
           echo "Running embedded cluster installation test for version: ${{ steps.version.outputs.test_version }}"
-          ssh -o StrictHostKeyChecking=no -p $(echo $SSH_ENDPOINT | cut -d: -f2) $(echo $SSH_ENDPOINT | cut -d: -f1) 'chmod +x /tmp/test.sh && sudo TEST_VERSION="${{ steps.version.outputs.test_version }}" /tmp/test.sh'
+          ssh -o StrictHostKeyChecking=no $SSH_ENDPOINT 'chmod +x /tmp/test.sh && sudo TEST_VERSION="${{ steps.version.outputs.test_version }}" /tmp/test.sh'
 
           echo "Test completed successfully!"
         env:
