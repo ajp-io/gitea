@@ -1,0 +1,34 @@
+apiVersion: kots.io/v1beta1
+kind: ConfigValues
+metadata:
+  creationTimestamp: null
+  name: gitea
+spec:
+  values:
+    database_type:
+      default: embedded
+    embedded_postgres_database:
+      default: gitea
+    embedded_postgres_password:
+      default: gitea
+      value: wXBCjGeYGx3R21K9brwAdA==
+    embedded_postgres_username:
+      default: gitea
+    enable_ha:
+      default: "0"
+    external_postgres_database:
+      default: gitea
+    external_postgres_host: {}
+    external_postgres_password:
+      value: wXBCjGeYGx3R21K9brwAdA==
+    external_postgres_schema:
+      default: public
+    external_postgres_username:
+      default: postgres
+    gitea_email:
+      value: alexp@replicated.com
+    gitea_password:
+      value: DCzXLjVVOmPHnskBB2fBUdfl5KoQhA==
+    gitea_username:
+      value: alex
+status: {}

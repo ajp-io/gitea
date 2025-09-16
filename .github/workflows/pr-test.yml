@@ -1,0 +1,154 @@
+name: PR Test - Embedded Cluster
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'gitea/**'
+      - 'manifests/**'
+
+env:
+  REPLICATED_APP: gitea-mastodon
+  REPLICATED_API_ORIGIN: https://api.replicated.com/vendor
+
+jobs:
+  test-embedded-cluster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Replicated CLI
+        run: |
+          curl -s https://api.github.com/repos/replicatedhq/replicated/releases/latest \
+          | grep "browser_download_url.*linux_amd64.tar.gz" \
+          | cut -d : -f 2,3 \
+          | tr -d \" \
+          | wget -O replicated.tar.gz -qi -
+          tar xf replicated.tar.gz
+          sudo mv replicated /usr/local/bin/
+
+      - name: Generate test version
+        id: version
+        run: |
+          # Generate unique version for PR testing
+          VERSION="0.0.0-pr.${{ github.event.pull_request.number }}.${{ github.run_number }}"
+          echo "test_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated test version: $VERSION"
+
+      - name: Package Helm chart
+        run: |
+          # Clean any existing packages
+          rm -f manifests/*.tgz
+
+          # Package the chart
+          helm package gitea -d manifests -u
+          echo "Packaged chart:"
+          ls -la manifests/*.tgz
+
+      - name: Create test release
+        run: |
+          # Create release on Unstable channel for testing
+          replicated release create \
+            --lint \
+            --yaml-dir ./manifests \
+            --promote Unstable \
+            --version "${{ steps.version.outputs.test_version }}"
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+          REPLICATED_APP: ${{ env.REPLICATED_APP }}
+
+      - name: Create test VM
+        id: vm
+        run: |
+          # Create VM for testing
+          VM_ID=$(replicated vm create \
+            --distribution ubuntu \
+            --version 22.04 \
+            --instance-type r1.medium \
+            --name "pr-test-${{ github.event.pull_request.number }}" \
+            --output json | jq -r '.id')
+
+          echo "vm_id=$VM_ID" >> $GITHUB_OUTPUT
+          echo "Created VM: $VM_ID"
+
+          # Wait for VM to be ready
+          echo "Waiting for VM to be ready..."
+          sleep 30
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+
+      - name: Setup SSH and transfer files
+        run: |
+          # Setup SSH key for Compatibility Matrix
+          mkdir -p ~/.ssh
+          ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
+
+          # Get SSH endpoint
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
+          echo "SSH endpoint: $SSH_ENDPOINT"
+
+          # Make scripts executable
+          chmod +x scripts/test-embedded-install.sh
+
+          # Transfer test files to VM
+          scp -o StrictHostKeyChecking=no test/embedded-config.yaml $SSH_ENDPOINT:/tmp/config.yaml
+          scp -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SSH_ENDPOINT:/tmp/test.sh
+
+          echo "Files transferred successfully"
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+
+      - name: Run embedded cluster installation test
+        id: test
+        run: |
+          # Get SSH endpoint
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
+
+          # Run the test script on the VM
+          echo "Running embedded cluster installation test..."
+          ssh -o StrictHostKeyChecking=no $SSH_ENDPOINT 'chmod +x /tmp/test.sh && sudo /tmp/test.sh'
+
+          echo "Test completed successfully!"
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+
+      - name: Cleanup VM
+        if: always()
+        run: |
+          if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
+            echo "Cleaning up VM: ${{ steps.vm.outputs.vm_id }}"
+            replicated vm rm ${{ steps.vm.outputs.vm_id }} --force || true
+            echo "VM cleanup completed"
+          fi
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+
+      - name: Clean up test artifacts
+        if: always()
+        run: |
+          rm -f manifests/*.tgz
+          echo "Cleaned up build artifacts"
+
+      - name: Report test results
+        if: always()
+        run: |
+          if [[ "${{ steps.test.outcome }}" == "success" ]]; then
+            echo "✅ Embedded cluster installation test PASSED"
+            echo "The Gitea chart changes work correctly with embedded cluster deployment."
+          else
+            echo "❌ Embedded cluster installation test FAILED"
+            echo "There may be issues with the chart changes. Please review the logs above."
+            exit 1
+          fi
