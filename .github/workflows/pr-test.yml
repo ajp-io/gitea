@@ -144,8 +144,8 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan replicatedvm.com >> ~/.ssh/known_hosts
 
-          # Get SSH endpoint
-          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
+          # Get SSH endpoint with username
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
           echo "SSH endpoint: $SSH_ENDPOINT"
 
           # Make scripts executable
@@ -163,7 +163,7 @@ jobs:
         id: test
         run: |
           # Get SSH endpoint
-          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }})
+          SSH_ENDPOINT=$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username github-actions)
 
           # Run the test script on the VM with the test version
           echo "Running embedded cluster installation test for version: ${{ steps.version.outputs.test_version }}"
