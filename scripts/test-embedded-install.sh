@@ -4,8 +4,8 @@ set -euo pipefail
 echo "=== Gitea Embedded Cluster Installation Test ==="
 echo "Starting at: $(date)"
 
-echo "Downloading Embedded Cluster installation assets..."
-curl -f "https://updates.alexparker.info/embedded/gitea-mastodon/unstable" \
+echo "Downloading Embedded Cluster installation assets for version: ${TEST_VERSION}"
+curl -f "https://updates.alexparker.info/embedded/gitea-mastodon/unstable/${TEST_VERSION}" \
   -H "Authorization: 3ZnCUpJuy9TUwE8CYdvS2KIIFy9" \
   -o gitea-mastodon-unstable.tgz
 
