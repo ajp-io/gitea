@@ -114,8 +114,8 @@ jobs:
           chmod +x scripts/test-embedded-install.sh
 
           # Transfer test files to VM using SCP endpoint
-          scp -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT:/tmp/config.yaml
-          scp -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT:/tmp/test.sh
+          scp -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT/tmp/config.yaml
+          scp -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT/tmp/test.sh
 
           echo "Files transferred successfully"
         env:
