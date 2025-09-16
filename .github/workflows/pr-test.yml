@@ -96,9 +96,29 @@ jobs:
           echo "vm_id=$VM_ID" >> $GITHUB_OUTPUT
           echo "Created VM: $VM_ID"
 
-          # Wait for VM to be ready
-          echo "Waiting for VM to be ready..."
-          sleep 30
+          # Wait for VM to be in running state
+          echo "Waiting for VM to be in running state..."
+          for i in {1..20}; do
+            VM_STATUS=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\") | .status")
+            echo "VM status check $i: $VM_STATUS"
+
+            if [[ "$VM_STATUS" == "running" ]]; then
+              echo "✅ VM is now running!"
+              break
+            elif [[ "$VM_STATUS" == "error" || "$VM_STATUS" == "terminated" ]]; then
+              echo "❌ VM failed to start (status: $VM_STATUS)"
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          # Final status check
+          FINAL_STATUS=$(replicated vm ls --output json | jq -r ".[] | select(.id==\"$VM_ID\") | .status")
+          if [[ "$FINAL_STATUS" != "running" ]]; then
+            echo "❌ VM never reached running state (final status: $FINAL_STATUS)"
+            exit 1
+          fi
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
 
