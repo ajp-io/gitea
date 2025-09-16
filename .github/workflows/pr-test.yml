@@ -43,10 +43,12 @@ jobs:
       - name: Generate test version
         id: version
         run: |
-          # Generate unique version for PR testing
-          VERSION="0.0.0-pr.${{ github.event.pull_request.number }}.${{ github.run_number }}"
+          # Generate unique version for PR testing using timestamp and commit SHA
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          VERSION="0.0.0-pr${{ github.event.pull_request.number }}-${TIMESTAMP}-${COMMIT_SHORT}"
           echo "test_version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated test version: $VERSION"
+          echo "Generated unique test version: $VERSION"
 
       - name: Package Helm chart
         run: |
