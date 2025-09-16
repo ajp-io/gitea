@@ -74,13 +74,15 @@ jobs:
       - name: Create test VM
         id: vm
         run: |
-          # Create VM for testing with 10 minute wait
-          echo "Creating VM for PR testing (waiting up to 10 minutes)..."
+          # Create VM for testing with 10 minute wait and unique name
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          VM_NAME="pr-test-${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
+          echo "Creating VM for PR testing: $VM_NAME (waiting up to 10 minutes)..."
           VM_OUTPUT=$(replicated vm create \
             --distribution ubuntu \
             --version 22.04 \
             --instance-type r1.small \
-            --name "pr-test-${{ github.event.pull_request.number }}" \
+            --name "$VM_NAME" \
             --wait 10m \
             --output json)
 
@@ -113,9 +115,9 @@ jobs:
           # Make scripts executable
           chmod +x scripts/test-embedded-install.sh
 
-          # Transfer test files to VM using SCP endpoint
-          scp -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT/tmp/config.yaml
-          scp -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT/tmp/test.sh
+          # Transfer test files to VM using SCP protocol format
+          scp -O -o StrictHostKeyChecking=no test/embedded-config.yaml $SCP_ENDPOINT/tmp/config.yaml
+          scp -O -o StrictHostKeyChecking=no scripts/test-embedded-install.sh $SCP_ENDPOINT/tmp/test.sh
 
           echo "Files transferred successfully"
         env:
