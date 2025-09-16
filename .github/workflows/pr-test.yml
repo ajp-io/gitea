@@ -178,7 +178,7 @@ jobs:
         run: |
           if [[ -n "${{ steps.vm.outputs.vm_id }}" ]]; then
             echo "✅ Test passed! Cleaning up VM: ${{ steps.vm.outputs.vm_id }}"
-            replicated vm rm ${{ steps.vm.outputs.vm_id }} --force || true
+            replicated vm rm ${{ steps.vm.outputs.vm_id }} || true
             echo "VM cleanup completed"
           fi
         env:
