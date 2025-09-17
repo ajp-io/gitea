@@ -27,23 +27,20 @@ sudo ./gitea-mastodon install \
 
 echo "Installation complete! Verifying cluster and pods..."
 
-# Use shell with heredoc to run kubectl commands
-sudo ./gitea-mastodon shell << 'EOF'
+# Run kubectl commands via the shell (non-interactive)
 echo "Checking cluster status..."
-kubectl get nodes
+sudo ./gitea-mastodon shell -c "kubectl get nodes"
 
 echo "Checking all pods across namespaces..."
-kubectl get pods -A
+sudo ./gitea-mastodon shell -c "kubectl get pods -A"
 
 echo "Waiting for Gitea pods to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=gitea -n default --timeout=300s
+sudo ./gitea-mastodon shell -c "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=gitea -n default --timeout=300s"
 
 echo "Checking Gitea service..."
-kubectl get svc -l app.kubernetes.io/name=gitea
+sudo ./gitea-mastodon shell -c "kubectl get svc -l app.kubernetes.io/name=gitea"
 
 echo "Cluster verification complete!"
-exit
-EOF
 
 echo "=== Gitea Embedded Cluster Installation Test PASSED ==="
 echo "Completed at: $(date)"
