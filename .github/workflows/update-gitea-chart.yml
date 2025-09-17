@@ -96,7 +96,7 @@ jobs:
         id: create-pr
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITEA_UPDATE_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: |
             chore: update Gitea Helm chart to v${{ steps.check-updates.outputs.latest_version }}
 
@@ -160,7 +160,7 @@ jobs:
 
           echo "✅ Auto-merge enabled! PR will merge automatically once all required checks pass."
         env:
-          GH_TOKEN: ${{ secrets.GITEA_UPDATE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Output results
         run: |
