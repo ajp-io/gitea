@@ -27,19 +27,46 @@ sudo ./gitea-mastodon install \
 
 echo "Installation complete! Verifying cluster and pods..."
 
-# Run kubectl commands via the shell (non-interactive)
+# Set kubectl path and kubeconfig
+KUBECTL="sudo KUBECONFIG=/var/lib/embedded-cluster/k0s/pki/admin.conf /var/lib/embedded-cluster/bin/kubectl"
+
 echo "Checking cluster status..."
-sudo ./gitea-mastodon shell -c "kubectl get nodes"
+$KUBECTL get nodes
 
-echo "Checking all pods across namespaces..."
-sudo ./gitea-mastodon shell -c "kubectl get pods -A"
+echo "Checking all resources..."
+$KUBECTL get deployment,statefulset,service -n kotsadm | grep gitea
 
-echo "Waiting for Gitea pods to be ready..."
-sudo ./gitea-mastodon shell -c "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=gitea -n default --timeout=300s"
+# Wait for Deployments to be available
+echo "Waiting for Gitea deployment to be available..."
+$KUBECTL wait deployment/gitea --for=condition=available -n kotsadm --timeout=300s
 
-echo "Checking Gitea service..."
-sudo ./gitea-mastodon shell -c "kubectl get svc -l app.kubernetes.io/name=gitea"
+echo "Waiting for Gitea SDK deployment to be available..."
+$KUBECTL wait deployment/gitea-sdk --for=condition=available -n kotsadm --timeout=300s
 
+# Wait for StatefulSets to have ready replicas
+echo "Waiting for PostgreSQL StatefulSet to have ready replicas..."
+$KUBECTL wait statefulset/gitea-postgresql --for=jsonpath='{.status.readyReplicas}'=1 -n kotsadm --timeout=300s
+
+echo "Waiting for Valkey StatefulSet to have ready replicas..."
+$KUBECTL wait statefulset/gitea-valkey-primary --for=jsonpath='{.status.readyReplicas}'=1 -n kotsadm --timeout=300s
+
+# Wait for Services to have endpoints (confirms they have healthy backends)
+echo "Waiting for Gitea HTTP service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-http -n kotsadm --timeout=300s
+
+echo "Waiting for Gitea SSH service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-ssh -n kotsadm --timeout=300s
+
+echo "Waiting for Gitea SDK service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-sdk -n kotsadm --timeout=300s
+
+echo "Waiting for PostgreSQL service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-postgresql -n kotsadm --timeout=300s
+
+echo "Waiting for Valkey service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-valkey-primary -n kotsadm --timeout=300s
+
+echo "All resources verified and ready!"
 echo "Cluster verification complete!"
 
 echo "=== Gitea Embedded Cluster Installation Test PASSED ==="
