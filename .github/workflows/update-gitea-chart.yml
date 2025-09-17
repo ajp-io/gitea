@@ -84,6 +84,8 @@ jobs:
           echo "latest_sdk_version=$LATEST_SDK_VERSION" >> $GITHUB_OUTPUT
           echo "gitea_update_needed=$GITEA_UPDATE_NEEDED" >> $GITHUB_OUTPUT
           echo "sdk_update_needed=$SDK_UPDATE_NEEDED" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update chart using script
         if: steps.check-updates.outputs.update_available == 'true'
