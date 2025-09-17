@@ -1,0 +1,152 @@
+name: Update Gitea Helm Chart
+
+on:
+  schedule:
+    # Check for updates daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+env:
+  GITEA_CHART_REPO: "https://dl.gitea.com/charts/"
+  GITEA_CHART_NAME: "gitea"
+
+jobs:
+  check-for-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Install yq (YAML processor)
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Check for chart updates
+        id: check-updates
+        run: |
+          # Use our update script to check versions
+          chmod +x scripts/update-gitea-chart.sh
+
+          # Get current version from Chart.yaml
+          CURRENT_VERSION=$(yq eval '.version' gitea/Chart.yaml)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Add Gitea Helm repository and get latest version
+          helm repo add gitea-charts ${{ env.GITEA_CHART_REPO }} --force-update
+          helm repo update
+          LATEST_VERSION=$(helm search repo gitea-charts/${{ env.GITEA_CHART_NAME }} --version=">=0.0.0" -o json | jq -r '.[0].version')
+          echo "Latest version: $LATEST_VERSION"
+
+          # Compare versions
+          if [[ "$CURRENT_VERSION" != "$LATEST_VERSION" ]]; then
+            echo "Update available: $CURRENT_VERSION -> $LATEST_VERSION"
+            echo "update_available=true" >> $GITHUB_OUTPUT
+            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Already up to date"
+            echo "update_available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update chart using script
+        if: steps.check-updates.outputs.update_available == 'true'
+        run: |
+          # Run our update script
+          ./scripts/update-gitea-chart.sh
+
+      - name: Generate detailed changelog
+        if: steps.check-updates.outputs.update_available == 'true'
+        id: changelog
+        run: |
+          # Get changelog from Chart.yaml annotations if available
+          CHANGELOG=$(yq eval '.annotations."artifacthub.io/changes"' gitea/Chart.yaml 2>/dev/null || echo "No detailed changelog available")
+
+          # Create a formatted changelog for the PR
+          cat > /tmp/changelog.md << 'EOF'
+          ## 📋 Detailed Changes
+
+          EOF
+
+          if [[ "$CHANGELOG" != "null" && "$CHANGELOG" != "No detailed changelog available" ]]; then
+            echo "$CHANGELOG" | sed 's/^/- /' >> /tmp/changelog.md
+          else
+            echo "- Updated to Gitea Helm Chart v${{ steps.check-updates.outputs.latest_version }}" >> /tmp/changelog.md
+            echo "- See [upstream releases](https://gitea.com/gitea/helm-gitea/releases) for detailed changes" >> /tmp/changelog.md
+          fi
+
+          # Store changelog for PR body
+          {
+            echo 'CHANGELOG<<EOF'
+            cat /tmp/changelog.md
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.check-updates.outputs.update_available == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: update Gitea Helm chart to v${{ steps.check-updates.outputs.latest_version }}
+
+            - Update from v${{ steps.check-updates.outputs.current_version }} to v${{ steps.check-updates.outputs.latest_version }}
+            - Synchronized with upstream Gitea Helm chart
+            - Preserved custom configurations where applicable
+          title: "chore: Update Gitea Helm Chart to v${{ steps.check-updates.outputs.latest_version }}"
+          body: |
+            ## 🚀 Gitea Helm Chart Update
+
+            This PR automatically updates the Gitea Helm chart from version **${{ steps.check-updates.outputs.current_version }}** to **${{ steps.check-updates.outputs.latest_version }}**.
+
+            ### 📋 Summary
+            - **Previous Version:** `${{ steps.check-updates.outputs.current_version }}`
+            - **New Version:** `${{ steps.check-updates.outputs.latest_version }}`
+            - **Update Type:** Automated upstream sync
+
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ### 🔍 Verification Checklist
+            - [ ] Review `Chart.yaml` changes for version and dependencies
+            - [ ] Check `values.yaml` for any breaking changes or new options
+            - [ ] Verify template compatibility with existing deployments
+            - [ ] Check for any `.custom` files that need manual merging
+            - [ ] Test deployment in staging environment
+            - [ ] Validate that Replicated integration still works correctly
+
+            ### 📝 Important Notes
+            - Custom configurations have been preserved where possible
+            - Any conflicting files are saved with `.custom` extension for manual review
+            - Review the [upstream changelog](https://gitea.com/gitea/helm-gitea/releases/tag/v${{ steps.check-updates.outputs.latest_version }}) for detailed changes
+
+            ### 🤖 Automation Info
+            - Workflow: `update-gitea-chart.yml`
+            - Trigger: Scheduled check for updates
+            - Script: `scripts/update-gitea-chart.sh`
+            - **Auto-merge**: This PR will automatically merge if all tests pass ✨
+
+            ---
+
+            _This PR was created automatically by the Gitea chart update workflow. It will **auto-merge once tests pass** thanks to the `auto-merge` label._
+          branch: update-gitea-chart-v${{ steps.check-updates.outputs.latest_version }}
+          delete-branch: true
+          labels: |
+            automated-pr
+            helm-chart
+            gitea-update
+            auto-merge
+          assignees: ${{ github.actor }}
+          reviewers: ${{ github.actor }}
+
+      - name: Output results
+        run: |
+          if [[ "${{ steps.check-updates.outputs.update_available }}" == "true" ]]; then
+            echo "✅ Created PR to update Gitea chart from ${{ steps.check-updates.outputs.current_version }} to ${{ steps.check-updates.outputs.latest_version }}"
+          else
+            echo "ℹ️ Gitea chart is already up to date"
+          fi
