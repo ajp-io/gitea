@@ -76,7 +76,7 @@ jobs:
         run: |
           # Create VM for testing with 10 minute wait and unique name
           COMMIT_SHORT=$(git rev-parse --short HEAD)
-          VM_NAME="pr-test-${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
+          VM_NAME="embedded-cluster-pr${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
           echo "Creating VM for PR testing: $VM_NAME (waiting up to 10 minutes)..."
           VM_OUTPUT=$(replicated vm create \
             --distribution ubuntu \
