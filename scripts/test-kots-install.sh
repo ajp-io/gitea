@@ -5,7 +5,7 @@ echo "=== Gitea KOTS Installation Test ==="
 echo "Starting at: $(date)"
 
 # Configuration
-CUSTOMER_ID="2urvCTbDE5zac3WDObpo9GlxOfi"
+CUSTOMER_ID="32nCUsAp1lNpmF8o33nxDTpGGPz"
 NAMESPACE="gitea-mastodon"
 APP_NAME="gitea-mastodon"
 SHARED_PASSWORD="TestAdminPassword123!"
