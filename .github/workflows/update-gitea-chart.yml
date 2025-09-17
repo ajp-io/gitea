@@ -96,17 +96,23 @@ jobs:
         id: check-pr
         run: |
           # Check if a PR already exists for this version update
-          BRANCH_NAME="update-gitea-chart-v${{ steps.check-updates.outputs.latest_version }}"
+          # Look for open PRs with the gitea-update label that mention the target version
 
-          # Check if PR exists for this branch
-          if gh pr view "$BRANCH_NAME" --json number,state 2>/dev/null | jq -e '.state == "open"' >/dev/null; then
-            echo "An open PR already exists for this version update"
+          echo "Checking for existing PRs for Gitea v${{ steps.check-updates.outputs.latest_version }}..."
+
+          # Search for open PRs with gitea-update label
+          EXISTING_PR=$(gh pr list \
+            --state open \
+            --label "gitea-update" \
+            --json number,title,headRefName \
+            --jq '.[] | select(.title | contains("v${{ steps.check-updates.outputs.latest_version }}")) | .number' \
+            | head -1)
+
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "An open PR already exists for this version update: PR #$EXISTING_PR"
             echo "pr_exists=true" >> $GITHUB_OUTPUT
-
-            # Get the existing PR number for reference
-            PR_NUMBER=$(gh pr view "$BRANCH_NAME" --json number | jq -r '.number')
-            echo "existing_pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-            echo "Found existing PR #$PR_NUMBER for Gitea v${{ steps.check-updates.outputs.latest_version }}"
+            echo "existing_pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+            echo "Found existing PR #$EXISTING_PR for Gitea v${{ steps.check-updates.outputs.latest_version }}"
           else
             echo "No existing PR found for this version update"
             echo "pr_exists=false" >> $GITHUB_OUTPUT
