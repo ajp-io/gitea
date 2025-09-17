@@ -142,6 +142,23 @@ update_chart() {
     success "Chart files updated"
 }
 
+# Update manifest version references
+update_manifest_version() {
+    local new_version="$1"
+    local manifest_file="$PROJECT_ROOT/manifests/gitea.yaml"
+
+    if [[ -f "$manifest_file" ]]; then
+        log "Updating manifest chart version to $new_version..."
+
+        # Update the chartVersion in the manifest file
+        yq eval ".spec.chart.chartVersion = \"$new_version\"" -i "$manifest_file"
+
+        success "Manifest version updated to $new_version"
+    else
+        warn "Manifest file not found at $manifest_file"
+    fi
+}
+
 # Show summary of changes
 show_changes() {
     local old_version="$1"
@@ -219,6 +236,9 @@ main() {
 
     # Update the chart
     update_chart
+
+    # Update manifest references
+    update_manifest_version "$latest_version"
 
     # Show summary
     show_changes "$current_version" "$latest_version"
