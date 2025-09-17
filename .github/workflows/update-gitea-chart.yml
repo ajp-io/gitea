@@ -147,18 +147,20 @@ jobs:
           assignees: ${{ github.actor }}
           reviewers: ${{ github.actor }}
 
-      - name: Enable auto-merge
+      - name: Enable auto-merge (if supported)
         if: steps.check-updates.outputs.update_available == 'true' && steps.create-pr.outputs.pull-request-number != ''
         run: |
-          echo "🤖 Enabling auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
+          echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
 
-          # Enable auto-merge with squash method
-          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+          # Try to enable auto-merge with squash method (may fail if not enabled for repo)
+          if gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
             --auto \
             --squash \
-            --delete-branch
-
-          echo "✅ Auto-merge enabled! PR will merge automatically once all required checks pass."
+            --delete-branch 2>/dev/null; then
+            echo "✅ Auto-merge enabled! PR will merge automatically once all required checks pass."
+          else
+            echo "ℹ️ Auto-merge not available for this repository. PR will need manual merge after tests pass."
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
