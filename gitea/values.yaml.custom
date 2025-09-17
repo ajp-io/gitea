@@ -8,7 +8,7 @@
 ## @param global.storageClass global storage class override
 ## @param global.hostAliases global hostAliases which will be added to the pod's hosts files
 global:
-  imageRegistry: ""
+  imageRegistry: "images.alexparker.info"
   ## E.g.
   ## imagePullSecrets:
   ##   - myRegistryKeySecretName
@@ -48,8 +48,8 @@ clusterDomain: cluster.local
 ## @param image.rootless Wether or not to pull the rootless version of Gitea, only works on Gitea 1.14.x or higher
 ## @param image.fullOverride Completely overrides the image registry, path/image, tag and digest. **Adjust `image.rootless` accordingly and review [Rootless defaults](#rootless-defaults).**
 image:
-  registry: "docker.gitea.com"
-  repository: gitea
+  registry: "images.alexparker.info"
+  repository: proxy/gitea-mastodon/docker/gitea/gitea
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
   digest: ""
@@ -527,6 +527,8 @@ gitea:
 ## @descriptionEnd
 valkey-cluster:
   enabled: true
+  image:
+    repository: "proxy/gitea-mastodon/docker/bitnami/valkey-cluster"
   usePassword: false
   usePasswordFiles: false
   cluster:
@@ -535,6 +537,14 @@ valkey-cluster:
   service:
     ports:
       valkey: 6379
+  volumePermissions:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/os-shell"
+  sysctlImage:
+    repository: "proxy/gitea-mastodon/docker/bitnami/os-shell"
+  metrics:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/redis-exporter"
 
 ## @section valkey
 ## @param valkey.enabled Enable valkey standalone or replicated
@@ -549,6 +559,8 @@ valkey-cluster:
 ## @descriptionEnd
 valkey:
   enabled: false
+  image:
+    repository: "proxy/gitea-mastodon/docker/bitnami/valkey"
   architecture: standalone
   global:
     valkey:
@@ -558,6 +570,12 @@ valkey:
     service:
       ports:
         valkey: 6379
+  volumePermissions:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/os-shell"
+  metrics:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/redis-exporter"
 
 ## @section PostgreSQL HA
 #
@@ -573,19 +591,29 @@ valkey:
 ## @param postgresql-ha.service.ports.postgresql PostgreSQL service port (overrides `service.ports.postgresql`)
 ## @param postgresql-ha.persistence.size PVC Storage Request for PostgreSQL HA volume
 postgresql-ha:
+  postgresql:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/postgresql-repmgr"
+    repmgrPassword: changeme2
+    postgresPassword: changeme1
+    password: changeme4
+  pgpool:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/pgpool"
+    adminPassword: changeme3
+    srCheckPassword: changeme4
+  metrics:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/postgres-exporter"
+  volumePermissions:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/os-shell"
   global:
     postgresql:
       database: gitea
       password: gitea
       username: gitea
   enabled: true
-  postgresql:
-    repmgrPassword: changeme2
-    postgresPassword: changeme1
-    password: changeme4
-  pgpool:
-    adminPassword: changeme3
-    srCheckPassword: changeme4
   service:
     ports:
       postgresql: 5432
@@ -602,6 +630,8 @@ postgresql-ha:
 ## @param postgresql.primary.persistence.size PVC Storage Request for PostgreSQL volume
 postgresql:
   enabled: false
+  image:
+    repository: "proxy/gitea-mastodon/docker/bitnami/postgresql"
   global:
     postgresql:
       auth:
@@ -614,6 +644,12 @@ postgresql:
   primary:
     persistence:
       size: 10Gi
+  volumePermissions:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/os-shell"
+  metrics:
+    image:
+      repository: "proxy/gitea-mastodon/docker/bitnami/postgres-exporter"
 
 # By default, removed or moved settings that still remain in a user defined values.yaml will cause Helm to fail running the install/update.
 # Set it to false to skip this basic validation check.
@@ -632,3 +668,7 @@ test:
 ## @param extraDeploy Array of extra objects to deploy with the release
 ##
 extraDeploy: []
+
+replicated:
+  nameOverride: gitea-sdk
+  replicatedAppDomain: updates.alexparker.info
