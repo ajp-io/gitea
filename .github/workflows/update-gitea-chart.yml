@@ -89,6 +89,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check-updates.outputs.update_available == 'true'
+        id: create-pr
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -132,16 +133,29 @@ jobs:
 
             ---
 
-            _This PR was created automatically by the Gitea chart update workflow. It will **auto-merge once tests pass** thanks to the `auto-merge` label._
+            _This PR was created automatically by the Gitea chart update workflow. It will **auto-merge once tests pass** thanks to GitHub's built-in auto-merge feature._
           branch: update-gitea-chart-v${{ steps.check-updates.outputs.latest_version }}
           delete-branch: true
           labels: |
             automated-pr
             helm-chart
             gitea-update
-            auto-merge
           assignees: ${{ github.actor }}
           reviewers: ${{ github.actor }}
+
+      - name: Enable auto-merge
+        if: steps.check-updates.outputs.update_available == 'true' && steps.create-pr.outputs.pull-request-number != ''
+        run: |
+          echo "🤖 Enabling auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
+
+          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+            --auto \
+            --squash \
+            --delete-branch
+
+          echo "✅ Auto-merge enabled! PR will merge automatically once tests pass."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Output results
         run: |
