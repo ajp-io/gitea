@@ -108,19 +108,15 @@ jobs:
 
       - name: Setup kubectl and run KOTS install
         run: |
-          # Get kubeconfig and set up kubectl
+          # Set up kubectl using replicated cluster kubeconfig
           echo "Setting up kubectl with cluster kubeconfig..."
           echo "Cluster ID: ${{ steps.cluster.outputs.cluster_id }}"
 
-          # Get kubeconfig and check if it's valid
-          replicated cluster kubeconfig ${{ steps.cluster.outputs.cluster_id }} > kubeconfig
-          echo "Kubeconfig file size: $(wc -c < kubeconfig) bytes"
-          echo "First few lines of kubeconfig:"
-          head -5 kubeconfig || true
+          # The replicated cluster kubeconfig command updates ~/.kube/config automatically
+          # and sets the current context, so we don't need to manage a separate kubeconfig file
+          replicated cluster kubeconfig ${{ steps.cluster.outputs.cluster_id }}
 
-          export KUBECONFIG=$(pwd)/kubeconfig
-
-          # Verify kubectl access
+          # Verify kubectl access (should now use the updated ~/.kube/config)
           echo "Verifying kubectl access..."
           kubectl get nodes
           kubectl get namespaces
@@ -133,7 +129,6 @@ jobs:
           echo "Running KOTS installation test for version: ${{ steps.version.outputs.test_version }}"
           TEST_VERSION="${{ steps.version.outputs.test_version }}" \
           REPLICATED_API_TOKEN="${{ secrets.REPLICATED_API_TOKEN }}" \
-          KUBECONFIG=$(pwd)/kubeconfig \
           ./scripts/test-kots-install.sh
 
           echo "KOTS test completed successfully!"
@@ -155,7 +150,6 @@ jobs:
         if: always()
         run: |
           rm -f manifests/*.tgz
-          rm -f kubeconfig
           echo "Cleaned up build artifacts"
 
       - name: Report test results
