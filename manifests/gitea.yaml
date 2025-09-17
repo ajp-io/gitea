@@ -6,7 +6,7 @@ spec:
   # chart identifies a matching chart from a .tgz
   chart:
     name: gitea
-    chartVersion: 12.2.0
+    chartVersion: 12.3.0
   helmUpgradeFlags:
     - --wait
     - --timeout
