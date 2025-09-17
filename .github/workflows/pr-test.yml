@@ -45,7 +45,9 @@ jobs:
         run: |
           # Generate unique version for PR testing using PR number, run number, and commit SHA
           COMMIT_SHORT=$(git rev-parse --short HEAD)
-          VERSION="2.0.0-pr${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
+          PR_NUM=$(printf "%03d" ${{ github.event.pull_request.number }})
+          RUN_NUM=$(printf "%03d" ${{ github.run_number }})
+          VERSION="2.0.0-pr${PR_NUM}-r${RUN_NUM}-${COMMIT_SHORT}"
           echo "test_version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated unique test version: $VERSION"
 
