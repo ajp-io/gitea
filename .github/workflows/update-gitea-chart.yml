@@ -31,32 +31,59 @@ jobs:
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Check for chart updates
+      - name: Check for chart and SDK updates
         id: check-updates
         run: |
           # Use our update script to check versions
           chmod +x scripts/update-gitea-chart.sh
 
-          # Get current version from Chart.yaml
-          CURRENT_VERSION=$(yq eval '.version' gitea/Chart.yaml)
-          echo "Current version: $CURRENT_VERSION"
+          # Get current Gitea version from Chart.yaml
+          CURRENT_GITEA_VERSION=$(yq eval '.version' gitea/Chart.yaml)
+          echo "Current Gitea version: $CURRENT_GITEA_VERSION"
 
           # Add Gitea Helm repository and get latest version
           helm repo add gitea-charts ${{ env.GITEA_CHART_REPO }} --force-update
           helm repo update
-          LATEST_VERSION=$(helm search repo gitea-charts/${{ env.GITEA_CHART_NAME }} --version=">=0.0.0" -o json | jq -r '.[0].version')
-          echo "Latest version: $LATEST_VERSION"
+          LATEST_GITEA_VERSION=$(helm search repo gitea-charts/${{ env.GITEA_CHART_NAME }} --version=">=0.0.0" -o json | jq -r '.[0].version')
+          echo "Latest Gitea version: $LATEST_GITEA_VERSION"
 
-          # Compare versions
-          if [[ "$CURRENT_VERSION" != "$LATEST_VERSION" ]]; then
-            echo "Update available: $CURRENT_VERSION -> $LATEST_VERSION"
-            echo "update_available=true" >> $GITHUB_OUTPUT
-            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-            echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-          else
-            echo "Already up to date"
-            echo "update_available=false" >> $GITHUB_OUTPUT
+          # Get current SDK version from Chart.yaml
+          CURRENT_SDK_VERSION=$(yq eval '.dependencies[] | select(.name == "replicated") | .version' gitea/Chart.yaml 2>/dev/null || echo "")
+          echo "Current SDK version: ${CURRENT_SDK_VERSION:-"not present"}"
+
+          # Get latest SDK version from GitHub releases
+          LATEST_SDK_VERSION=$(gh api repos/replicatedhq/replicated-sdk/releases/latest --jq '.tag_name' | sed 's/^v//')
+          echo "Latest SDK version: $LATEST_SDK_VERSION"
+
+          # Check if any updates are needed
+          GITEA_UPDATE_NEEDED=false
+          SDK_UPDATE_NEEDED=false
+
+          if [[ "$CURRENT_GITEA_VERSION" != "$LATEST_GITEA_VERSION" ]]; then
+            GITEA_UPDATE_NEEDED=true
+            echo "Gitea update available: $CURRENT_GITEA_VERSION -> $LATEST_GITEA_VERSION"
           fi
+
+          if [[ "$CURRENT_SDK_VERSION" != "$LATEST_SDK_VERSION" ]]; then
+            SDK_UPDATE_NEEDED=true
+            echo "SDK update available: ${CURRENT_SDK_VERSION:-"not present"} -> $LATEST_SDK_VERSION"
+          fi
+
+          # Set output variables
+          if [[ "$GITEA_UPDATE_NEEDED" == true || "$SDK_UPDATE_NEEDED" == true ]]; then
+            echo "update_available=true" >> $GITHUB_OUTPUT
+            echo "Updates needed - Gitea: $GITEA_UPDATE_NEEDED, SDK: $SDK_UPDATE_NEEDED"
+          else
+            echo "update_available=false" >> $GITHUB_OUTPUT
+            echo "Both Gitea and SDK are up to date"
+          fi
+
+          echo "current_gitea_version=$CURRENT_GITEA_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_gitea_version=$LATEST_GITEA_VERSION" >> $GITHUB_OUTPUT
+          echo "current_sdk_version=$CURRENT_SDK_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_sdk_version=$LATEST_SDK_VERSION" >> $GITHUB_OUTPUT
+          echo "gitea_update_needed=$GITEA_UPDATE_NEEDED" >> $GITHUB_OUTPUT
+          echo "sdk_update_needed=$SDK_UPDATE_NEEDED" >> $GITHUB_OUTPUT
 
       - name: Update chart using script
         if: steps.check-updates.outputs.update_available == 'true'
@@ -68,20 +95,38 @@ jobs:
         if: steps.check-updates.outputs.update_available == 'true'
         id: changelog
         run: |
-          # Get changelog from Chart.yaml annotations if available
-          CHANGELOG=$(yq eval '.annotations."artifacthub.io/changes"' gitea/Chart.yaml 2>/dev/null || echo "No detailed changelog available")
-
           # Create a formatted changelog for the PR
           cat > /tmp/changelog.md << 'EOF'
           ## 📋 Detailed Changes
 
           EOF
 
-          if [[ "$CHANGELOG" != "null" && "$CHANGELOG" != "No detailed changelog available" ]]; then
-            echo "$CHANGELOG" | sed 's/^/- /' >> /tmp/changelog.md
-          else
-            echo "- Updated to Gitea Helm Chart v${{ steps.check-updates.outputs.latest_version }}" >> /tmp/changelog.md
-            echo "- See [upstream releases](https://gitea.com/gitea/helm-gitea/releases) for detailed changes" >> /tmp/changelog.md
+          # Add Gitea changes if updated
+          if [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" ]]; then
+            echo "### 🏗️ Gitea Chart Update" >> /tmp/changelog.md
+            echo "- Updated from v${{ steps.check-updates.outputs.current_gitea_version }} to v${{ steps.check-updates.outputs.latest_gitea_version }}" >> /tmp/changelog.md
+
+            # Get changelog from Chart.yaml annotations if available
+            GITEA_CHANGELOG=$(yq eval '.annotations."artifacthub.io/changes"' gitea/Chart.yaml 2>/dev/null || echo "")
+            if [[ "$GITEA_CHANGELOG" != "null" && -n "$GITEA_CHANGELOG" ]]; then
+              echo "- Chart changes:" >> /tmp/changelog.md
+              echo "$GITEA_CHANGELOG" | sed 's/^/  - /' >> /tmp/changelog.md
+            fi
+
+            echo "- See [upstream releases](https://gitea.com/gitea/helm-gitea/releases/tag/v${{ steps.check-updates.outputs.latest_gitea_version }}) for detailed changes" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+          fi
+
+          # Add SDK changes if updated
+          if [[ "${{ steps.check-updates.outputs.sdk_update_needed }}" == "true" ]]; then
+            echo "### 🔧 Replicated SDK Update" >> /tmp/changelog.md
+            if [[ -n "${{ steps.check-updates.outputs.current_sdk_version }}" ]]; then
+              echo "- Updated from v${{ steps.check-updates.outputs.current_sdk_version }} to v${{ steps.check-updates.outputs.latest_sdk_version }}" >> /tmp/changelog.md
+            else
+              echo "- Added Replicated SDK v${{ steps.check-updates.outputs.latest_sdk_version }}" >> /tmp/changelog.md
+            fi
+            echo "- See [SDK releases](https://github.com/replicatedhq/replicated-sdk/releases/tag/v${{ steps.check-updates.outputs.latest_sdk_version }}) for detailed changes" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
           fi
 
           # Store changelog for PR body
@@ -95,26 +140,25 @@ jobs:
         if: steps.check-updates.outputs.update_available == 'true'
         id: check-pr
         run: |
-          # Check if a PR already exists for this version update
-          # Look for open PRs with the gitea-update label that mention the target version
+          # Check if a PR already exists for similar updates
+          # Look for open PRs with the automated-pr label
 
-          echo "Checking for existing PRs for Gitea v${{ steps.check-updates.outputs.latest_version }}..."
+          echo "Checking for existing update PRs..."
 
-          # Search for open PRs with gitea-update label
+          # Search for open PRs with automated-pr label
           EXISTING_PR=$(gh pr list \
             --state open \
-            --label "gitea-update" \
+            --label "automated-pr" \
             --json number,title,headRefName \
-            --jq '.[] | select(.title | contains("v${{ steps.check-updates.outputs.latest_version }}")) | .number' \
+            --jq '.[] | select(.title | test("(Gitea|chart|SDK).*[Uu]pdate")) | .number' \
             | head -1)
 
           if [[ -n "$EXISTING_PR" ]]; then
-            echo "An open PR already exists for this version update: PR #$EXISTING_PR"
+            echo "An open update PR already exists: PR #$EXISTING_PR"
             echo "pr_exists=true" >> $GITHUB_OUTPUT
             echo "existing_pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
-            echo "Found existing PR #$EXISTING_PR for Gitea v${{ steps.check-updates.outputs.latest_version }}"
           else
-            echo "No existing PR found for this version update"
+            echo "No existing update PR found"
             echo "pr_exists=false" >> $GITHUB_OUTPUT
           fi
         env:
@@ -123,65 +167,80 @@ jobs:
       - name: Create Pull Request
         if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false'
         id: create-pr
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: |
-            chore: update Gitea Helm chart to v${{ steps.check-updates.outputs.latest_version }}
+        run: |
+          # Generate commit message
+          COMMIT_MSG="chore: update dependencies"
+          TITLE_PARTS=""
+          BRANCH_NAME="update-dependencies-$(date +%Y%m%d-%H%M%S)"
 
-            - Update from v${{ steps.check-updates.outputs.current_version }} to v${{ steps.check-updates.outputs.latest_version }}
-            - Synchronized with upstream Gitea Helm chart
-            - Preserved custom configurations where applicable
-          title: "chore: Update Gitea Helm Chart to v${{ steps.check-updates.outputs.latest_version }}"
-          body: |
-            ## 🚀 Gitea Helm Chart Update
+          if [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" && "${{ steps.check-updates.outputs.sdk_update_needed }}" == "true" ]]; then
+            COMMIT_MSG="chore: update Gitea chart to v${{ steps.check-updates.outputs.latest_gitea_version }} and SDK to v${{ steps.check-updates.outputs.latest_sdk_version }}"
+            TITLE_PARTS="Gitea v${{ steps.check-updates.outputs.latest_gitea_version }} + SDK v${{ steps.check-updates.outputs.latest_sdk_version }}"
+            BRANCH_NAME="update-gitea-v${{ steps.check-updates.outputs.latest_gitea_version }}-sdk-v${{ steps.check-updates.outputs.latest_sdk_version }}"
+          elif [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" ]]; then
+            COMMIT_MSG="chore: update Gitea chart to v${{ steps.check-updates.outputs.latest_gitea_version }}"
+            TITLE_PARTS="Gitea v${{ steps.check-updates.outputs.latest_gitea_version }}"
+            BRANCH_NAME="update-gitea-v${{ steps.check-updates.outputs.latest_gitea_version }}"
+          else
+            COMMIT_MSG="chore: update Replicated SDK to v${{ steps.check-updates.outputs.latest_sdk_version }}"
+            TITLE_PARTS="SDK v${{ steps.check-updates.outputs.latest_sdk_version }}"
+            BRANCH_NAME="update-sdk-v${{ steps.check-updates.outputs.latest_sdk_version }}"
+          fi
 
-            This PR automatically updates the Gitea Helm chart from version **${{ steps.check-updates.outputs.current_version }}** to **${{ steps.check-updates.outputs.latest_version }}**.
+          # Create PR using gh CLI
+          gh pr create \
+            --title "chore: Update $TITLE_PARTS" \
+            --body "$(cat <<'EOF'
+          ## 🚀 Automated Dependency Update
 
-            ### 📋 Summary
-            - **Previous Version:** `${{ steps.check-updates.outputs.current_version }}`
-            - **New Version:** `${{ steps.check-updates.outputs.latest_version }}`
-            - **Update Type:** Automated upstream sync
+          This PR automatically updates dependencies in the Gitea Helm chart.
 
-            ${{ steps.changelog.outputs.CHANGELOG }}
+          ### 📋 Summary
+          ${{ steps.changelog.outputs.CHANGELOG }}
 
-            ### 🔍 Verification Checklist
-            - [ ] Review `Chart.yaml` changes for version and dependencies
-            - [ ] Check `values.yaml` for any breaking changes or new options
-            - [ ] Verify template compatibility with existing deployments
-            - [ ] Check for any `.custom` files that need manual merging
-            - [ ] Test deployment in staging environment
-            - [ ] Validate that Replicated integration still works correctly
+          ### 🔍 Verification Checklist
+          - [ ] Review \`Chart.yaml\` changes for version and dependencies
+          - [ ] Check \`values.yaml\` for any breaking changes or new options
+          - [ ] Verify template compatibility with existing deployments
+          - [ ] Check for any \`.custom\` files that need manual merging
+          - [ ] Test deployment in staging environment
+          - [ ] Validate that Replicated integration still works correctly
 
-            ### 📝 Important Notes
-            - Custom configurations have been preserved where possible
-            - Any conflicting files are saved with `.custom` extension for manual review
-            - Review the [upstream changelog](https://gitea.com/gitea/helm-gitea/releases/tag/v${{ steps.check-updates.outputs.latest_version }}) for detailed changes
+          ### 📝 Important Notes
+          - Custom configurations have been preserved where possible
+          - Any conflicting files are saved with \`.custom\` extension for manual review
+          - Replicated SDK dependency is maintained and updated automatically
 
-            ### 🤖 Automation Info
-            - Workflow: `update-gitea-chart.yml`
-            - Trigger: Scheduled check for updates
-            - Script: `scripts/update-gitea-chart.sh`
-            - **Auto-merge**: This PR will automatically merge if all tests pass ✨
+          ### 🤖 Automation Info
+          - Workflow: \`update-gitea-chart.yml\`
+          - Trigger: Scheduled check for updates
+          - Script: \`scripts/update-gitea-chart.sh\`
+          - **Auto-merge**: This PR will automatically merge if all tests pass ✨
 
-            ---
+          ---
 
-            _This PR was created automatically by the Gitea chart update workflow. It will **auto-merge once tests pass** thanks to GitHub's built-in auto-merge feature._
-          branch: update-gitea-chart-v${{ steps.check-updates.outputs.latest_version }}
-          delete-branch: true
-          labels: |
-            automated-pr
-            gitea-update
-          assignees: ${{ github.actor }}
-          reviewers: ${{ github.actor }}
+          _This PR was created automatically by the chart update workflow. It will **auto-merge once tests pass** thanks to GitHub's built-in auto-merge feature._
+          EOF
+          )" \
+            --head "$BRANCH_NAME" \
+            --label "automated-pr,dependency-update" \
+            --assignee "${{ github.actor }}" \
+            --reviewer "${{ github.actor }}"
+
+          # Get PR number for auto-merge
+          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
+          echo "pull_request_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge (if supported)
-        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false' && steps.create-pr.outputs.pull-request-number != ''
+        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false' && steps.create-pr.outputs.pull_request_number != ''
         run: |
-          echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
+          echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull_request_number }}"
 
           # Try to enable auto-merge with squash method (may fail if not enabled for repo)
-          if gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+          if gh pr merge ${{ steps.create-pr.outputs.pull_request_number }} \
             --auto \
             --squash \
             --delete-branch 2>/dev/null; then
@@ -196,11 +255,19 @@ jobs:
         run: |
           if [[ "${{ steps.check-updates.outputs.update_available }}" == "true" ]]; then
             if [[ "${{ steps.check-pr.outputs.pr_exists }}" == "true" ]]; then
-              echo "ℹ️ Update available but PR #${{ steps.check-pr.outputs.existing_pr_number }} already exists for Gitea v${{ steps.check-updates.outputs.latest_version }}"
+              echo "ℹ️ Updates available but PR #${{ steps.check-pr.outputs.existing_pr_number }} already exists"
               echo "Skipped creating duplicate PR. Existing PR will auto-merge when tests pass."
             else
-              echo "✅ Created PR to update Gitea chart from ${{ steps.check-updates.outputs.current_version }} to ${{ steps.check-updates.outputs.latest_version }}"
+              echo "✅ Created PR with the following updates:"
+              if [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" ]]; then
+                echo "  - Gitea chart: ${{ steps.check-updates.outputs.current_gitea_version }} → ${{ steps.check-updates.outputs.latest_gitea_version }}"
+              fi
+              if [[ "${{ steps.check-updates.outputs.sdk_update_needed }}" == "true" ]]; then
+                echo "  - Replicated SDK: ${{ steps.check-updates.outputs.current_sdk_version }} → ${{ steps.check-updates.outputs.latest_sdk_version }}"
+              fi
             fi
           else
-            echo "ℹ️ Gitea chart is already up to date"
+            echo "ℹ️ Both Gitea chart and Replicated SDK are up to date"
+            echo "  - Gitea: ${{ steps.check-updates.outputs.current_gitea_version }}"
+            echo "  - SDK: ${{ steps.check-updates.outputs.current_sdk_version }}"
           fi

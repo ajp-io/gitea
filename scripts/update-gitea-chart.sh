@@ -65,6 +65,40 @@ get_latest_version() {
     helm search repo gitea-charts/"$GITEA_CHART_NAME" --version=">=0.0.0" -o json | jq -r '.[0].version'
 }
 
+# Get current SDK version from Chart.yaml
+get_current_sdk_version() {
+    if [[ ! -f "$GITEA_CHART_DIR/Chart.yaml" ]]; then
+        echo ""
+        return
+    fi
+    yq eval '.dependencies[] | select(.name == "replicated") | .version' "$GITEA_CHART_DIR/Chart.yaml" 2>/dev/null || echo ""
+}
+
+# Get latest SDK version from GitHub releases
+get_latest_sdk_version() {
+    local api_url="https://api.github.com/repos/replicatedhq/replicated-sdk/releases/latest"
+    local version
+
+    if command -v curl &> /dev/null; then
+        version=$(curl -s "$api_url" | jq -r '.tag_name' 2>/dev/null)
+    elif command -v wget &> /dev/null; then
+        version=$(wget -qO- "$api_url" | jq -r '.tag_name' 2>/dev/null)
+    else
+        error "Neither curl nor wget is available to fetch SDK version"
+        return 1
+    fi
+
+    # Remove 'v' prefix if present
+    version=${version#v}
+
+    if [[ "$version" == "null" || -z "$version" ]]; then
+        error "Failed to fetch latest SDK version"
+        return 1
+    fi
+
+    echo "$version"
+}
+
 # Download and extract the latest chart
 download_latest_chart() {
     local version="$1"
@@ -84,6 +118,44 @@ download_latest_chart() {
     fi
 
     success "Chart downloaded to $TEMP_DIR/gitea"
+}
+
+# Inject Replicated SDK dependency into Chart.yaml
+inject_sdk_dependency() {
+    local new_chart_dir="$TEMP_DIR/gitea"
+    local sdk_version="$1"
+
+    if [[ -z "$sdk_version" ]]; then
+        error "SDK version not provided to inject_sdk_dependency"
+        return 1
+    fi
+
+    log "Injecting Replicated SDK dependency (version $sdk_version)..."
+
+    # Check if the dependency already exists
+    local existing_sdk
+    existing_sdk=$(yq eval '.dependencies[] | select(.name == "replicated") | .version' "$new_chart_dir/Chart.yaml" 2>/dev/null || echo "")
+
+    if [[ -n "$existing_sdk" ]]; then
+        # Update existing dependency
+        log "Updating existing SDK dependency from $existing_sdk to $sdk_version"
+        yq eval '.dependencies[] |= (select(.name == "replicated").version = "'$sdk_version'")' -i "$new_chart_dir/Chart.yaml"
+    else
+        # Add new dependency
+        log "Adding new SDK dependency with version $sdk_version"
+        yq eval '.dependencies += [{"name": "replicated", "repository": "oci://registry.replicated.com/library", "version": "'$sdk_version'"}]' -i "$new_chart_dir/Chart.yaml"
+    fi
+
+    # Verify the dependency was added/updated correctly
+    local injected_version
+    injected_version=$(yq eval '.dependencies[] | select(.name == "replicated") | .version' "$new_chart_dir/Chart.yaml" 2>/dev/null)
+
+    if [[ "$injected_version" == "$sdk_version" ]]; then
+        success "SDK dependency injected successfully (version $sdk_version)"
+    else
+        error "Failed to inject SDK dependency. Expected $sdk_version, got $injected_version"
+        return 1
+    fi
 }
 
 # Preserve custom configurations
@@ -161,21 +233,28 @@ update_manifest_version() {
 
 # Show summary of changes
 show_changes() {
-    local old_version="$1"
-    local new_version="$2"
+    local old_gitea_version="$1"
+    local new_gitea_version="$2"
+    local old_sdk_version="$3"
+    local new_sdk_version="$4"
 
     echo
     echo "================================================================"
     echo "Gitea Helm Chart Update Summary"
     echo "================================================================"
-    echo "Previous version: $old_version"
-    echo "New version:      $new_version"
+    echo "Gitea Chart:"
+    echo "  Previous version: $old_gitea_version"
+    echo "  New version:      $new_gitea_version"
+    echo
+    echo "Replicated SDK:"
+    echo "  Previous version: ${old_sdk_version:-"not present"}"
+    echo "  New version:      $new_sdk_version"
     echo
 
     # Show file changes
     log "Modified files:"
     if command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
-        git -C "$PROJECT_ROOT" status --porcelain gitea/ || true
+        git -C "$PROJECT_ROOT" status --porcelain gitea/ manifests/ || true
     else
         echo "Git not available - showing directory contents:"
         ls -la "$GITEA_CHART_DIR"
@@ -208,28 +287,57 @@ main() {
     # Check dependencies
     check_dependencies
 
-    # Get current and latest versions
-    local current_version
-    current_version=$(get_current_version)
-    log "Current version: $current_version"
+    # Get current and latest Gitea versions
+    local current_gitea_version
+    current_gitea_version=$(get_current_version)
+    log "Current Gitea version: $current_gitea_version"
 
-    local latest_version
-    latest_version=$(get_latest_version)
-    log "Latest version: $latest_version"
+    local latest_gitea_version
+    latest_gitea_version=$(get_latest_version)
+    log "Latest Gitea version: $latest_gitea_version"
 
-    # Check if update is needed
-    if [[ "$current_version" == "$latest_version" ]]; then
-        success "Chart is already up to date (version $current_version)"
-        exit 0
+    # Get current and latest SDK versions
+    local current_sdk_version
+    current_sdk_version=$(get_current_sdk_version)
+    log "Current SDK version: ${current_sdk_version:-"not present"}"
+
+    local latest_sdk_version
+    latest_sdk_version=$(get_latest_sdk_version)
+    if [[ $? -eq 0 ]]; then
+        log "Latest SDK version: $latest_sdk_version"
+    else
+        error "Failed to fetch latest SDK version"
+        exit 1
     fi
 
-    log "Update available: $current_version -> $latest_version"
+    # Check if any update is needed
+    local gitea_needs_update=false
+    local sdk_needs_update=false
+
+    if [[ "$current_gitea_version" != "$latest_gitea_version" ]]; then
+        gitea_needs_update=true
+        log "Gitea update available: $current_gitea_version -> $latest_gitea_version"
+    fi
+
+    if [[ "$current_sdk_version" != "$latest_sdk_version" ]]; then
+        sdk_needs_update=true
+        log "SDK update available: ${current_sdk_version:-"not present"} -> $latest_sdk_version"
+    fi
+
+    if [[ "$gitea_needs_update" == false && "$sdk_needs_update" == false ]]; then
+        success "Both Gitea chart and SDK are up to date"
+        success "Gitea: $current_gitea_version, SDK: $current_sdk_version"
+        exit 0
+    fi
 
     # Set up cleanup trap
     trap cleanup EXIT
 
-    # Download latest chart
-    download_latest_chart "$latest_version"
+    # Download latest chart (always download to get fresh base)
+    download_latest_chart "$latest_gitea_version"
+
+    # Always inject SDK dependency with latest version
+    inject_sdk_dependency "$latest_sdk_version"
 
     # Preserve custom configurations
     preserve_custom_configs
@@ -238,12 +346,19 @@ main() {
     update_chart
 
     # Update manifest references
-    update_manifest_version "$latest_version"
+    update_manifest_version "$latest_gitea_version"
 
     # Show summary
-    show_changes "$current_version" "$latest_version"
+    show_changes "$current_gitea_version" "$latest_gitea_version" "$current_sdk_version" "$latest_sdk_version"
 
     success "Gitea Helm chart updated successfully!"
+    if [[ "$gitea_needs_update" == true && "$sdk_needs_update" == true ]]; then
+        success "Updated both Gitea ($current_gitea_version -> $latest_gitea_version) and SDK ($current_sdk_version -> $latest_sdk_version)"
+    elif [[ "$gitea_needs_update" == true ]]; then
+        success "Updated Gitea ($current_gitea_version -> $latest_gitea_version) and ensured SDK is latest ($latest_sdk_version)"
+    else
+        success "Updated SDK ($current_sdk_version -> $latest_sdk_version)"
+    fi
 }
 
 # Handle script arguments
