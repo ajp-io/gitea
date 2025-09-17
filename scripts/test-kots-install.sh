@@ -51,7 +51,7 @@ echo "Config values file verified"
 echo "Installing ${APP_NAME} with KOTS..."
 echo "This may take several minutes..."
 
-kubectl kots install ${APP_NAME} \
+kubectl kots install unstable/${APP_NAME} \
   --shared-password "${SHARED_PASSWORD}" \
   --license-file /tmp/license.yaml \
   --config-values /tmp/config-values.yaml \
