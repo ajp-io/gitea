@@ -169,80 +169,62 @@ jobs:
       - name: Create Pull Request
         if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false'
         id: create-pr
-        run: |
-          # Generate commit message
-          COMMIT_MSG="chore: update dependencies"
-          TITLE_PARTS=""
-          BRANCH_NAME="update-dependencies-$(date +%Y%m%d-%H%M%S)"
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: update dependencies
 
-          if [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" && "${{ steps.check-updates.outputs.sdk_update_needed }}" == "true" ]]; then
-            COMMIT_MSG="chore: update Gitea chart to v${{ steps.check-updates.outputs.latest_gitea_version }} and SDK to v${{ steps.check-updates.outputs.latest_sdk_version }}"
-            TITLE_PARTS="Gitea v${{ steps.check-updates.outputs.latest_gitea_version }} + SDK v${{ steps.check-updates.outputs.latest_sdk_version }}"
-            BRANCH_NAME="update-gitea-v${{ steps.check-updates.outputs.latest_gitea_version }}-sdk-v${{ steps.check-updates.outputs.latest_sdk_version }}"
-          elif [[ "${{ steps.check-updates.outputs.gitea_update_needed }}" == "true" ]]; then
-            COMMIT_MSG="chore: update Gitea chart to v${{ steps.check-updates.outputs.latest_gitea_version }}"
-            TITLE_PARTS="Gitea v${{ steps.check-updates.outputs.latest_gitea_version }}"
-            BRANCH_NAME="update-gitea-v${{ steps.check-updates.outputs.latest_gitea_version }}"
-          else
-            COMMIT_MSG="chore: update Replicated SDK to v${{ steps.check-updates.outputs.latest_sdk_version }}"
-            TITLE_PARTS="SDK v${{ steps.check-updates.outputs.latest_sdk_version }}"
-            BRANCH_NAME="update-sdk-v${{ steps.check-updates.outputs.latest_sdk_version }}"
-          fi
+            ${{ steps.check-updates.outputs.gitea_update_needed == 'true' && format('- Update Gitea chart from v{0} to v{1}', steps.check-updates.outputs.current_gitea_version, steps.check-updates.outputs.latest_gitea_version) || '' }}
+            ${{ steps.check-updates.outputs.sdk_update_needed == 'true' && format('- Update SDK from v{0} to v{1}', steps.check-updates.outputs.current_sdk_version, steps.check-updates.outputs.latest_sdk_version) || '' }}
+            - Synchronized with upstream versions
+            - Preserved custom configurations where applicable
+          title: |
+            ${{ steps.check-updates.outputs.gitea_update_needed == 'true' && steps.check-updates.outputs.sdk_update_needed == 'true' && format('chore: Update Gitea v{0} + SDK v{1}', steps.check-updates.outputs.latest_gitea_version, steps.check-updates.outputs.latest_sdk_version) || steps.check-updates.outputs.gitea_update_needed == 'true' && format('chore: Update Gitea v{0}', steps.check-updates.outputs.latest_gitea_version) || format('chore: Update SDK v{0}', steps.check-updates.outputs.latest_sdk_version) }}
+          body: |
+            ## 🚀 Automated Dependency Update
 
-          # Create PR using gh CLI
-          gh pr create \
-            --title "chore: Update $TITLE_PARTS" \
-            --body "$(cat <<'EOF'
-          ## 🚀 Automated Dependency Update
+            This PR automatically updates dependencies in the Gitea Helm chart.
 
-          This PR automatically updates dependencies in the Gitea Helm chart.
+            ### 📋 Summary
+            ${{ steps.changelog.outputs.CHANGELOG }}
 
-          ### 📋 Summary
-          ${{ steps.changelog.outputs.CHANGELOG }}
+            ### 🔍 Verification Checklist
+            - [ ] Review `Chart.yaml` changes for version and dependencies
+            - [ ] Check `values.yaml` for any breaking changes or new options
+            - [ ] Verify template compatibility with existing deployments
+            - [ ] Check for any `.custom` files that need manual merging
+            - [ ] Test deployment in staging environment
+            - [ ] Validate that Replicated integration still works correctly
 
-          ### 🔍 Verification Checklist
-          - [ ] Review \`Chart.yaml\` changes for version and dependencies
-          - [ ] Check \`values.yaml\` for any breaking changes or new options
-          - [ ] Verify template compatibility with existing deployments
-          - [ ] Check for any \`.custom\` files that need manual merging
-          - [ ] Test deployment in staging environment
-          - [ ] Validate that Replicated integration still works correctly
+            ### 📝 Important Notes
+            - Custom configurations have been preserved where possible
+            - Any conflicting files are saved with `.custom` extension for manual review
+            - Replicated SDK dependency is maintained and updated automatically
 
-          ### 📝 Important Notes
-          - Custom configurations have been preserved where possible
-          - Any conflicting files are saved with \`.custom\` extension for manual review
-          - Replicated SDK dependency is maintained and updated automatically
+            ### 🤖 Automation Info
+            - Workflow: `update-gitea-chart.yml`
+            - Trigger: Scheduled check for updates
+            - Script: `scripts/update-gitea-chart.sh`
+            - **Auto-merge**: This PR will automatically merge if all tests pass ✨
 
-          ### 🤖 Automation Info
-          - Workflow: \`update-gitea-chart.yml\`
-          - Trigger: Scheduled check for updates
-          - Script: \`scripts/update-gitea-chart.sh\`
-          - **Auto-merge**: This PR will automatically merge if all tests pass ✨
+            ---
 
-          ---
-
-          _This PR was created automatically by the chart update workflow. It will **auto-merge once tests pass** thanks to GitHub's built-in auto-merge feature._
-          EOF
-          )" \
-            --head "$BRANCH_NAME" \
-            --label "automated-pr" \
-            --assignee "${{ github.actor }}" \
-            --reviewer "${{ github.actor }}"
-
-          # Get PR number for auto-merge
-          PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
-          echo "pull_request_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            _This PR was created automatically by the chart update workflow. It will **auto-merge once tests pass** thanks to GitHub's built-in auto-merge feature._
+          branch: |
+            ${{ steps.check-updates.outputs.gitea_update_needed == 'true' && steps.check-updates.outputs.sdk_update_needed == 'true' && format('update-gitea-v{0}-sdk-v{1}', steps.check-updates.outputs.latest_gitea_version, steps.check-updates.outputs.latest_sdk_version) || steps.check-updates.outputs.gitea_update_needed == 'true' && format('update-gitea-v{0}', steps.check-updates.outputs.latest_gitea_version) || format('update-sdk-v{0}', steps.check-updates.outputs.latest_sdk_version) }}
+          delete-branch: true
+          labels: automated-pr
+          assignees: ${{ github.actor }}
+          reviewers: ${{ github.actor }}
 
       - name: Enable auto-merge (if supported)
-        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false' && steps.create-pr.outputs.pull_request_number != ''
+        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false' && steps.create-pr.outputs.pull-request-number != ''
         run: |
-          echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull_request_number }}"
+          echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
 
           # Try to enable auto-merge with squash method (may fail if not enabled for repo)
-          if gh pr merge ${{ steps.create-pr.outputs.pull_request_number }} \
+          if gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
             --auto \
             --squash \
             --delete-branch 2>/dev/null; then
