@@ -21,7 +21,7 @@ echo "This may take several minutes..."
 # This command blocks until installation completes
 sudo ./gitea-mastodon install \
   --license license.yaml \
-  --config-values /tmp/config.yaml \
+  --config-values /tmp/config-values.yaml \
   --admin-console-password "TestAdminPassword123!" \
   -y
 
