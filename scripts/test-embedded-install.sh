@@ -22,7 +22,8 @@ echo "This may take several minutes..."
 sudo ./gitea-mastodon install \
   --license license.yaml \
   --config-values /tmp/config.yaml \
-  --admin-console-password "TestAdminPassword123!"
+  --admin-console-password "TestAdminPassword123!" \
+  -y
 
 echo "Installation complete! Verifying cluster and pods..."
 
