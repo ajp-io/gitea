@@ -36,21 +36,27 @@ $KUBECTL get nodes
 echo "Checking all resources..."
 $KUBECTL get deployment,statefulset,service -n kotsadm | grep gitea
 
-# Wait for Deployments to be available
-echo "Waiting for Gitea deployment to be available..."
-$KUBECTL wait deployment/gitea --for=condition=available -n kotsadm --timeout=300s
-
-echo "Waiting for Gitea SDK deployment to be available..."
-$KUBECTL wait deployment/gitea-sdk --for=condition=available -n kotsadm --timeout=300s
-
-# Wait for StatefulSets to have ready replicas
+# Wait for StatefulSets first (dependencies)
 echo "Waiting for PostgreSQL StatefulSet to have ready replicas..."
 $KUBECTL wait statefulset/gitea-postgresql --for=jsonpath='{.status.readyReplicas}'=1 -n kotsadm --timeout=300s
 
 echo "Waiting for Valkey StatefulSet to have ready replicas..."
 $KUBECTL wait statefulset/gitea-valkey-primary --for=jsonpath='{.status.readyReplicas}'=1 -n kotsadm --timeout=300s
 
+# Wait for Deployments (Gitea depends on database/cache)
+echo "Waiting for Gitea deployment to be available..."
+$KUBECTL wait deployment/gitea --for=condition=available -n kotsadm --timeout=300s
+
+echo "Waiting for Gitea SDK deployment to be available..."
+$KUBECTL wait deployment/gitea-sdk --for=condition=available -n kotsadm --timeout=300s
+
 # Wait for Services to have endpoints (confirms they have healthy backends)
+echo "Waiting for PostgreSQL service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-postgresql -n kotsadm --timeout=300s
+
+echo "Waiting for Valkey service to have endpoints..."
+$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-valkey-primary -n kotsadm --timeout=300s
+
 echo "Waiting for Gitea HTTP service to have endpoints..."
 $KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-http -n kotsadm --timeout=300s
 
@@ -59,12 +65,6 @@ $KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-ssh -n kotsadm --timeo
 
 echo "Waiting for Gitea SDK service to have endpoints..."
 $KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-sdk -n kotsadm --timeout=300s
-
-echo "Waiting for PostgreSQL service to have endpoints..."
-$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-postgresql -n kotsadm --timeout=300s
-
-echo "Waiting for Valkey service to have endpoints..."
-$KUBECTL wait --for=jsonpath='{.subsets}' endpoints/gitea-valkey-primary -n kotsadm --timeout=300s
 
 echo "All resources verified and ready!"
 echo "Cluster verification complete!"
