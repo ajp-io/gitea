@@ -169,7 +169,7 @@ jobs:
       - name: Create Pull Request
         if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false'
         id: create-pr
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: |
