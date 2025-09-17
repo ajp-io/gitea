@@ -59,72 +59,46 @@ jobs:
           echo "Packaged chart:"
           ls -la manifests/*.tgz
 
-      - name: Create test release and VM in parallel
+      - name: Create test release
+        run: |
+          # Create release on Unstable channel for testing
+          replicated release create \
+            --lint \
+            --yaml-dir ./manifests \
+            --promote Unstable \
+            --version "${{ steps.version.outputs.test_version }}"
+        env:
+          REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
+          REPLICATED_APP: ${{ env.REPLICATED_APP }}
+
+      - name: Create test VM
         id: vm
         run: |
-          echo "🚀 Starting test release creation and VM provisioning in parallel..."
-
-          # Start release creation in background
-          echo "📦 Creating test release..."
-          (
-            replicated release create \
-              --lint \
-              --yaml-dir ./manifests \
-              --promote Unstable \
-              --version "${{ steps.version.outputs.test_version }}" && \
-            echo "✅ Test release created successfully"
-          ) &
-          RELEASE_PID=$!
-
-          # Start VM creation in background
+          # Create VM for testing with 10 minute wait and unique name
           COMMIT_SHORT=$(git rev-parse --short HEAD)
           VM_NAME="embedded-cluster-pr${{ github.event.pull_request.number }}-r${{ github.run_number }}-${COMMIT_SHORT}"
-          echo "🖥️ Creating VM: $VM_NAME (waiting up to 10 minutes)..."
-          (
-            VM_OUTPUT=$(replicated vm create \
-              --distribution ubuntu \
-              --version 22.04 \
-              --instance-type r1.small \
-              --name "$VM_NAME" \
-              --wait 10m \
-              --output json)
+          echo "Creating VM for PR testing: $VM_NAME (waiting up to 10 minutes)..."
+          VM_OUTPUT=$(replicated vm create \
+            --distribution ubuntu \
+            --version 22.04 \
+            --instance-type r1.small \
+            --name "$VM_NAME" \
+            --wait 10m \
+            --output json)
 
-            echo "VM creation output:"
-            echo "$VM_OUTPUT"
+          echo "VM creation output:"
+          echo "$VM_OUTPUT"
 
-            # Try to extract VM ID - handle both object and array responses
-            VM_ID=$(echo "$VM_OUTPUT" | jq -r 'if type == "array" then .[0].id else .id end')
+          # Try to extract VM ID - handle both object and array responses
+          VM_ID=$(echo "$VM_OUTPUT" | jq -r 'if type == "array" then .[0].id else .id end')
 
-            if [[ -z "$VM_ID" || "$VM_ID" == "null" ]]; then
-              echo "❌ Failed to get VM ID from output"
-              exit 1
-            fi
-
-            echo "$VM_ID" > /tmp/vm_id
-            echo "✅ VM created and ready: $VM_ID"
-          ) &
-          VM_PID=$!
-
-          # Wait for both processes to complete
-          echo "⏳ Waiting for both release creation and VM provisioning to complete..."
-
-          # Wait for release creation
-          if ! wait $RELEASE_PID; then
-            echo "❌ Release creation failed"
-            kill $VM_PID 2>/dev/null || true
+          if [[ -z "$VM_ID" || "$VM_ID" == "null" ]]; then
+            echo "❌ Failed to get VM ID from output"
             exit 1
           fi
 
-          # Wait for VM creation
-          if ! wait $VM_PID; then
-            echo "❌ VM creation failed"
-            exit 1
-          fi
-
-          # Read VM ID from temp file and set output
-          VM_ID=$(cat /tmp/vm_id)
           echo "vm_id=$VM_ID" >> $GITHUB_OUTPUT
-          echo "🎉 Both release and VM creation completed successfully!"
+          echo "✅ VM created and ready: $VM_ID"
         env:
           REPLICATED_API_TOKEN: ${{ secrets.REPLICATED_API_TOKEN }}
           REPLICATED_APP: ${{ env.REPLICATED_APP }}
