@@ -197,7 +197,7 @@ jobs:
               echo ""
               echo "🔍 Debug Information:"
               echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
-              echo "VM has been left running for debugging (24h TTL)"
+              echo "VM has been left running for debugging (1h TTL)"
               echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
             fi
             exit 1
@@ -210,7 +210,7 @@ jobs:
               echo ""
               echo "🔍 Debug Information:"
               echo "VM ID: ${{ steps.vm.outputs.vm_id }}"
-              echo "VM has been left running for debugging (24h TTL)"
+              echo "VM has been left running for debugging (1h TTL)"
               echo "You can SSH to it using: ssh \$(replicated vm ssh-endpoint ${{ steps.vm.outputs.vm_id }} --username ajp-io)"
             fi
             exit 1
@@ -324,7 +324,7 @@ jobs:
               echo ""
               echo "🔍 Debug Information:"
               echo "Cluster ID: ${{ steps.cluster.outputs.cluster_id }}"
-              echo "Cluster has been left running for debugging (24h TTL)"
+              echo "Cluster has been left running for debugging (1h TTL)"
               echo "You can access it using: replicated cluster kubeconfig ${{ steps.cluster.outputs.cluster_id }}"
             fi
             exit 1
