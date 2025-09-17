@@ -225,7 +225,7 @@ jobs:
           EOF
           )" \
             --head "$BRANCH_NAME" \
-            --label "automated-pr,dependency-update" \
+            --label "automated-pr" \
             --assignee "${{ github.actor }}" \
             --reviewer "${{ github.actor }}"
 
