@@ -148,12 +148,13 @@ jobs:
         run: |
           echo "🤖 Enabling auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
 
+          # Enable auto-merge with squash method
           gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
             --auto \
             --squash \
             --delete-branch
 
-          echo "✅ Auto-merge enabled! PR will merge automatically once tests pass."
+          echo "✅ Auto-merge enabled! PR will merge automatically once all required checks pass."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
