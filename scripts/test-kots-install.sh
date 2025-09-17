@@ -5,7 +5,7 @@ echo "=== Gitea KOTS Installation Test ==="
 echo "Starting at: $(date)"
 
 # Configuration
-CUSTOMER_ID="32nCUsAp1lNpmF8o33nxDTpGGPz"
+CUSTOMER_ID="2urvCTbDE5zac3WDObpo9GlxOfi"
 NAMESPACE="gitea-mastodon"
 APP_NAME="gitea-mastodon"
 SHARED_PASSWORD="TestAdminPassword123!"
@@ -31,11 +31,9 @@ curl https://kots.io/install | bash
 echo "Verifying KOTS installation..."
 kubectl kots version
 
-# Download license from Replicated API v3
+# Download license using Replicated CLI (more reliable than curl API)
 echo "Downloading license for customer ID: ${CUSTOMER_ID}..."
-curl -H "Authorization: ${REPLICATED_API_TOKEN}" \
-     "https://api.replicated.com/vendor/v3/customer/${CUSTOMER_ID}/license-download" \
-     -o /tmp/license.yaml
+replicated customer download-license --customer "${CUSTOMER_ID}" > /tmp/license.yaml
 
 echo "License downloaded successfully"
 
@@ -47,9 +45,7 @@ fi
 
 echo "Config values file verified"
 
-# Create namespace
-echo "Creating namespace: ${NAMESPACE}"
-kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+# Note: KOTS will create the namespace automatically, so we don't need to create it manually
 
 # Install application using KOTS
 echo "Installing ${APP_NAME} with KOTS..."
