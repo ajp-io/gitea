@@ -91,8 +91,31 @@ jobs:
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
-      - name: Create Pull Request
+      - name: Check for existing PR
         if: steps.check-updates.outputs.update_available == 'true'
+        id: check-pr
+        run: |
+          # Check if a PR already exists for this version update
+          BRANCH_NAME="update-gitea-chart-v${{ steps.check-updates.outputs.latest_version }}"
+
+          # Check if PR exists for this branch
+          if gh pr view "$BRANCH_NAME" --json number,state 2>/dev/null | jq -e '.state == "open"' >/dev/null; then
+            echo "An open PR already exists for this version update"
+            echo "pr_exists=true" >> $GITHUB_OUTPUT
+
+            # Get the existing PR number for reference
+            PR_NUMBER=$(gh pr view "$BRANCH_NAME" --json number | jq -r '.number')
+            echo "existing_pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            echo "Found existing PR #$PR_NUMBER for Gitea v${{ steps.check-updates.outputs.latest_version }}"
+          else
+            echo "No existing PR found for this version update"
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Pull Request
+        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false'
         id: create-pr
         uses: peter-evans/create-pull-request@v5
         with:
@@ -147,7 +170,7 @@ jobs:
           reviewers: ${{ github.actor }}
 
       - name: Enable auto-merge (if supported)
-        if: steps.check-updates.outputs.update_available == 'true' && steps.create-pr.outputs.pull-request-number != ''
+        if: steps.check-updates.outputs.update_available == 'true' && steps.check-pr.outputs.pr_exists == 'false' && steps.create-pr.outputs.pull-request-number != ''
         run: |
           echo "🤖 Attempting to enable auto-merge for PR #${{ steps.create-pr.outputs.pull-request-number }}"
 
@@ -166,7 +189,12 @@ jobs:
       - name: Output results
         run: |
           if [[ "${{ steps.check-updates.outputs.update_available }}" == "true" ]]; then
-            echo "✅ Created PR to update Gitea chart from ${{ steps.check-updates.outputs.current_version }} to ${{ steps.check-updates.outputs.latest_version }}"
+            if [[ "${{ steps.check-pr.outputs.pr_exists }}" == "true" ]]; then
+              echo "ℹ️ Update available but PR #${{ steps.check-pr.outputs.existing_pr_number }} already exists for Gitea v${{ steps.check-updates.outputs.latest_version }}"
+              echo "Skipped creating duplicate PR. Existing PR will auto-merge when tests pass."
+            else
+              echo "✅ Created PR to update Gitea chart from ${{ steps.check-updates.outputs.current_version }} to ${{ steps.check-updates.outputs.latest_version }}"
+            fi
           else
             echo "ℹ️ Gitea chart is already up to date"
           fi
