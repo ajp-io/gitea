@@ -1,6 +1,0 @@
-apiVersion: v2
-appVersion: 1.8.0
-description: The Replicated SDK subchart
-name: replicated
-type: application
-version: 1.8.0
