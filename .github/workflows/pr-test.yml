@@ -110,7 +110,14 @@ jobs:
         run: |
           # Get kubeconfig and set up kubectl
           echo "Setting up kubectl with cluster kubeconfig..."
+          echo "Cluster ID: ${{ steps.cluster.outputs.cluster_id }}"
+
+          # Get kubeconfig and check if it's valid
           replicated cluster kubeconfig ${{ steps.cluster.outputs.cluster_id }} > kubeconfig
+          echo "Kubeconfig file size: $(wc -c < kubeconfig) bytes"
+          echo "First few lines of kubeconfig:"
+          head -5 kubeconfig || true
+
           export KUBECONFIG=$(pwd)/kubeconfig
 
           # Verify kubectl access
