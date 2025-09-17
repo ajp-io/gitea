@@ -142,7 +142,6 @@ jobs:
           delete-branch: true
           labels: |
             automated-pr
-            helm-chart
             gitea-update
           assignees: ${{ github.actor }}
           reviewers: ${{ github.actor }}
